@@ -93,7 +93,8 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 				feed_id,
 				reading_time,
 				changed_at,
-				tags
+				tags,
+				language
 			)
 		SELECT
 			$1,
@@ -107,7 +108,8 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 			$9,
 			$10,
 			CURRENT_TIMESTAMP,
-			$11
+			$11,
+			$12
 		WHERE NOT EXISTS (
 			SELECT 1 FROM entry_tombstones WHERE feed_id=$9 AND hash=$2
 		)
@@ -127,6 +129,7 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 		entry.FeedID,
 		entry.ReadingTime,
 		jsonStringArray(entry.Tags),
+		entry.Language,
 	).Scan(
 		&entry.ID,
 		&entry.Status,
@@ -166,9 +169,10 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 			content=$4,
 			author=$5,
 			reading_time=$6,
-			tags=$7
+			tags=$7,
+			language=$8
 		WHERE
-			user_id=$8 AND feed_id=$9 AND hash=$10
+			user_id=$9 AND feed_id=$10 AND hash=$11
 		RETURNING
 			id
 	`
@@ -181,6 +185,7 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 		entry.Author,
 		entry.ReadingTime,
 		jsonStringArray(entry.Tags),
+		entry.Language,
 		entry.UserID,
 		entry.FeedID,
 		entry.Hash,

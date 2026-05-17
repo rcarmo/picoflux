@@ -68,6 +68,13 @@ var migrations = []func(tx *sql.Tx) error{
 		`)
 		return err
 	},
+	func(tx *sql.Tx) (err error) {
+		_, err = tx.Exec(`
+			ALTER TABLE feeds ADD COLUMN language text not null default '';
+			ALTER TABLE entries ADD COLUMN language text not null default '';
+		`)
+		return err
+	},
 }
 
 const schemaSQLite = `
