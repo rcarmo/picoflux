@@ -1,0 +1,6 @@
+# sourced by /etc/init.d/picoflux
+# see cluster port in pg_lsclusters and ls -Al /var/run/postgresql/
+export DATABASE_URL='host=/var/run/postgresql/ port=5433 user=picoflux password=<my secrect db password> dbname=picoflux sslmode=disable'
+export LISTEN_ADDR='127.0.0.1:8081'
+export BASE_URL='https://<my picoflux domain> and path/'
+

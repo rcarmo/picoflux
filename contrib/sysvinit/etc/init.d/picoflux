@@ -1,7 +1,7 @@
 #! /bin/sh
 
 ### BEGIN INIT INFO
-# Provides:          miniflux
+# Provides:          picoflux
 # Required-Start:    $syslog $network
 # Required-Stop:     $syslog
 # Should-Start:      postgresql
@@ -19,7 +19,7 @@
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Miniflux"
-NAME=miniflux
+NAME=picoflux
 SERVICEVERBOSE=yes
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME

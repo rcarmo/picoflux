@@ -1,14 +1,14 @@
-.\" Manpage for miniflux.
-.TH "MINIFLUX" "1" "April 18, 2026" "\ \&" "\ \&"
+.\" Manpage for picoflux.
+.TH "PICOFLUX" "1" "April 18, 2026" "\ \&" "\ \&"
 
 .SH NAME
-miniflux \- Minimalist and opinionated feed reader
+picoflux \- Minimalist and opinionated feed reader
 
 .SH SYNOPSIS
-\fBminiflux\fR [\fBoptions\fR]
+\fBpicoflux\fR [\fBoptions\fR]
 
 .SH DESCRIPTION
-\fBminiflux\fR is a minimalist and opinionated feed reader.
+\fBpicoflux\fR is a minimalist and opinionated feed reader.
 
 .SH OPTIONS
 .B \-h, \-help
@@ -23,12 +23,12 @@ Print parsed configuration values.
 This will include sensitive information like passwords\&.
 .RE
 .PP
-.B \-c /path/to/miniflux.conf
+.B \-c /path/to/picoflux.conf
 .RS 4
 Load configuration file\&.
 .RE
 .PP
-.B \-config-file /path/to/miniflux.conf
+.B \-config-file /path/to/picoflux.conf
 .RS 4
 Load configuration file\&.
 .RE
@@ -49,7 +49,7 @@ Export user feeds (provide the username as argument)\&.
 .br
 Example:
 .EX
-miniflux -export-user-feeds someone > feeds.xml
+picoflux -export-user-feeds someone > feeds.xml
 .EE
 .RE
 .PP
@@ -264,7 +264,7 @@ Path to a secret key exposed as a file, it should contain the
 Default is empty\&.
 .TP
 .B DISABLE_API
-Disable miniflux's API\&.
+Disable picoflux's API\&.
 .br
 Default is false (The API is enabled)\&.
 .TP
@@ -390,7 +390,7 @@ Default is empty\&.
 .B LISTEN_ADDR
 Address to listen on.
 Use absolute path to listen on Unix socket
-(/var/run/miniflux.sock)\&.
+(/var/run/picoflux.sock)\&.
 .br
 Multiple addresses can be specified, separated by commas.
 For example: 127.0.0.1:8080, 127.0.0.1:8081\&.
@@ -533,7 +533,7 @@ OAuth2 redirect URL\&.
 .br
 This URL must be registered with the provider and is
 something like
-https://miniflux.example.org/oauth2/oidc/callback\&.
+https://picoflux.example.org/oauth2/oidc/callback\&.
 .br
 Default is empty\&.
 .TP

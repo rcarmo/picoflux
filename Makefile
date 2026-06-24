@@ -1,5 +1,5 @@
-APP             := miniflux
-DOCKER_IMAGE    := miniflux/miniflux
+APP             := picoflux
+DOCKER_IMAGE    := ghcr.io/rcarmo/picoflux
 VERSION         := $(shell git describe --tags --exact-match 2>/dev/null)
 LD_FLAGS        := "-s -w -X 'miniflux.app/v2/internal/version.Version=$(VERSION)'"
 PKG_LIST        := $(shell go list ./... | grep -v /vendor/)
@@ -8,8 +8,8 @@ DOCKER_PLATFORM := amd64
 
 
 .PHONY: \
-	miniflux \
-	miniflux-no-pie \
+	picoflux \
+	picoflux-no-pie \
 	linux-amd64 \
 	linux-arm64 \
 	linux-armv7 \
@@ -35,10 +35,10 @@ DOCKER_PLATFORM := amd64
 	debian \
 	debian-packages
 
-miniflux:
+picoflux:
 	@ go build -buildmode=pie -ldflags=$(LD_FLAGS) -o $(APP)
 
-miniflux-no-pie:
+picoflux-no-pie:
 	@ go build -ldflags=$(LD_FLAGS) -o $(APP)
 
 linux-amd64:
@@ -116,7 +116,7 @@ integration-test:
 	LOG_LEVEL=debug \
 	FETCHER_ALLOW_PRIVATE_NETWORKS=1 \
 	INTEGRATION_ALLOW_PRIVATE_NETWORKS=1 \
-	go run main.go >/tmp/miniflux.log 2>&1 & echo "$$!" > "/tmp/miniflux.pid"
+	go run main.go >/tmp/picoflux.log 2>&1 & echo "$$!" > "/tmp/picoflux.pid"
 
 	while ! nc -z localhost 8080; do sleep 1; done
 
@@ -126,8 +126,8 @@ integration-test:
 	go test -v -count=1 ./internal/api
 
 clean-integration-test:
-	@ kill -9 `cat /tmp/miniflux.pid`
-	@ rm -f /tmp/miniflux.pid /tmp/miniflux.log
+	@ kill -9 `cat /tmp/picoflux.pid`
+	@ rm -f /tmp/picoflux.pid /tmp/picoflux.log
 	@ rm -f /tmp/picoflux_test.db /tmp/picoflux_test.db-wal /tmp/picoflux_test.db-shm
 
 docker-image:
@@ -145,21 +145,21 @@ docker-images:
 
 rpm: clean
 	@ docker build \
-		-t miniflux-rpm-builder \
+		-t picoflux-rpm-builder \
 		-f packaging/rpm/Dockerfile \
 		.
 	@ docker run --rm \
-		-v ${PWD}:/root/rpmbuild/RPMS/x86_64 miniflux-rpm-builder \
-		rpmbuild -bb --define "_miniflux_version $(VERSION)" /root/rpmbuild/SPECS/miniflux.spec
+		-v ${PWD}:/root/rpmbuild/RPMS/x86_64 picoflux-rpm-builder \
+		rpmbuild -bb --define "_miniflux_version $(VERSION)" /root/rpmbuild/SPECS/picoflux.spec
 
 debian:
 	@ docker buildx build --load \
 		--platform linux/$(DOCKER_PLATFORM) \
-		-t miniflux-deb-builder \
+		-t picoflux-deb-builder \
 		-f packaging/debian/Dockerfile \
 		.
 	@ docker run --rm --platform linux/$(DOCKER_PLATFORM) \
-		-v ${PWD}:/pkg miniflux-deb-builder
+		-v ${PWD}:/pkg picoflux-deb-builder
 
 debian-packages: clean
 	$(MAKE) debian DOCKER_PLATFORM=amd64
