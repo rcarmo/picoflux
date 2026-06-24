@@ -150,7 +150,7 @@ func (s *Storage) WebAuthnCredentialsByUserID(userID int64) ([]model.WebAuthnCre
 func (s *Storage) WebAuthnSaveLogin(handle []byte, credential *webauthn.Credential) error {
 	query := `
 		UPDATE webauthn_credentials
-		SET last_seen_on = NOW(),
+		SET last_seen_on = CURRENT_TIMESTAMP,
 			sign_count = $1,
 			clone_warning = $2,
 			backup_eligible = $3,

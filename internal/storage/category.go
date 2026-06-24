@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lib/pq"
 	"miniflux.app/v2/internal/model"
 )
 
@@ -249,9 +248,9 @@ func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string
 		return errors.New("store: unable to begin transaction")
 	}
 
-	titleParam := pq.Array(titles)
+	titleParam := jsonStringArray(titles)
 	var count int
-	query := "SELECT count(*) FROM categories WHERE user_id = $1 and title != ANY($2)"
+	query := "SELECT count(*) FROM categories WHERE user_id = $1 AND title NOT IN (SELECT value FROM json_each($2))"
 	err = tx.QueryRow(query, userid, titleParam).Scan(&count)
 	if err != nil {
 		tx.Rollback()
@@ -263,7 +262,7 @@ func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string
 	}
 
 	query = `
-		WITH d_cats AS (SELECT id FROM categories WHERE user_id = $1 AND title = ANY($2))
+		WITH d_cats AS (SELECT id FROM categories WHERE user_id = $1 AND title IN (SELECT value FROM json_each($2)))
 		UPDATE feeds
 		 SET category_id =
 		  (SELECT id
@@ -279,7 +278,7 @@ func (s *Storage) RemoveAndReplaceCategoriesByName(userid int64, titles []string
 		return fmt.Errorf("store: unable to replace categories: %v", err)
 	}
 
-	query = "DELETE FROM categories WHERE user_id = $1 AND title = ANY($2)"
+	query = "DELETE FROM categories WHERE user_id = $1 AND title IN (SELECT value FROM json_each($2))"
 	_, err = tx.Exec(query, userid, titleParam)
 	if err != nil {
 		tx.Rollback()

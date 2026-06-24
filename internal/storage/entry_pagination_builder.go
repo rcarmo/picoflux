@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lib/pq"
 	"miniflux.app/v2/internal/model"
 )
 
@@ -27,8 +26,10 @@ type entryPaginationBuilder struct {
 // WithSearchQuery adds full-text search query to the condition.
 func (e *entryPaginationBuilder) WithSearchQuery(query string) *entryPaginationBuilder {
 	if query != "" {
-		e.conditions = append(e.conditions, fmt.Sprintf("e.document_vectors @@ websearch_to_tsquery($%d)", len(e.args)+1))
-		e.args = append(e.args, query)
+		e.conditions = append(e.conditions,
+			fmt.Sprintf("e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH $%d)", len(e.args)+1),
+		)
+		e.args = append(e.args, toFTS5Query(query))
 	}
 
 	return e
@@ -36,7 +37,7 @@ func (e *entryPaginationBuilder) WithSearchQuery(query string) *entryPaginationB
 
 // WithStarred adds starred to the condition.
 func (e *entryPaginationBuilder) WithStarred() *entryPaginationBuilder {
-	e.conditions = append(e.conditions, "e.starred is true")
+	e.conditions = append(e.conditions, "e.starred = 1")
 
 	return e
 }
@@ -92,8 +93,12 @@ func (e *entryPaginationBuilder) WithStatusOrEntryID(status string, entryID int6
 
 func (e *entryPaginationBuilder) WithTags(tags []string) *entryPaginationBuilder {
 	if len(tags) > 0 {
-		e.conditions = append(e.conditions, fmt.Sprintf("LOWER(e.tags::text)::text[] @> LOWER($%d::text)::text[]", len(e.args)+1))
-		e.args = append(e.args, pq.Array(tags))
+		e.conditions = append(e.conditions, fmt.Sprintf(
+			"NOT EXISTS (SELECT 1 FROM json_each($%d) needle "+
+				"WHERE lower(needle.value) NOT IN (SELECT lower(value) FROM json_each(e.tags)))",
+			len(e.args)+1,
+		))
+		e.args = append(e.args, jsonStringArray(tags))
 	}
 
 	return e
@@ -101,8 +106,8 @@ func (e *entryPaginationBuilder) WithTags(tags []string) *entryPaginationBuilder
 
 // WithGloballyVisible adds global visibility to the condition.
 func (e *entryPaginationBuilder) WithGloballyVisible() *entryPaginationBuilder {
-	e.conditions = append(e.conditions, "not c.hide_globally")
-	e.conditions = append(e.conditions, "not f.hide_globally")
+	e.conditions = append(e.conditions, "c.hide_globally = 0")
+	e.conditions = append(e.conditions, "f.hide_globally = 0")
 
 	return e
 }
@@ -207,7 +212,7 @@ func (s *Storage) NewEntryPaginationBuilder(userID, entryID int64, order, direct
 		args:       []any{userID},
 		conditions: []string{"e.user_id = $1"},
 		entryID:    entryID,
-		order:      pq.QuoteIdentifier(order),
+		order:      quoteIdentifier(order),
 		direction:  direction,
 	}
 }

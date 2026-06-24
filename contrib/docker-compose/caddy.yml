@@ -14,28 +14,15 @@ services:
   miniflux:
     image: ${MINIFLUX_IMAGE:-miniflux/miniflux:latest}
     container_name: miniflux
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://miniflux:secret@db/miniflux?sslmode=disable
+      - DATABASE_URL=/data/nanoflux.db
       - RUN_MIGRATIONS=1
       - CREATE_ADMIN=1
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=test123
       - BASE_URL=https://miniflux.example.org
-  db:
-    image: postgres:latest
-    container_name: postgres
-    environment:
-      - POSTGRES_USER=miniflux
-      - POSTGRES_PASSWORD=secret
     volumes:
-      - miniflux-db:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "miniflux"]
-      interval: 10s
-      start_period: 30s
+      - miniflux-db:/data
 volumes:
   miniflux-db:
   caddy_data:

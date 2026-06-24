@@ -183,8 +183,8 @@ func NewConfigOptions() *configOptions {
 				},
 			},
 			"DATABASE_URL": {
-				parsedStringValue: "user=postgres password=postgres dbname=miniflux2 sslmode=disable",
-				rawValue:          "user=postgres password=postgres dbname=miniflux2 sslmode=disable",
+				parsedStringValue: "nanoflux.db",
+				rawValue:          "nanoflux.db",
 				valueType:         stringType,
 				secret:            true,
 			},
@@ -811,7 +811,7 @@ func (c *configOptions) IsAuthProxyUserCreationAllowed() bool {
 }
 
 func (c *configOptions) IsDefaultDatabaseURL() bool {
-	return c.options["DATABASE_URL"].rawValue == "user=postgres password=postgres dbname=miniflux2 sslmode=disable"
+	return c.options["DATABASE_URL"].rawValue == "nanoflux.db"
 }
 
 func (c *configOptions) IsOAuth2UserCreationAllowed() bool {

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lib/pq"
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/timezone"
 )
@@ -70,9 +69,9 @@ func (f *feedQueryBuilder) WithCounters() *feedQueryBuilder {
 func (f *feedQueryBuilder) WithSorting(column, direction string) *feedQueryBuilder {
 	switch {
 	case strings.EqualFold(direction, "ASC"):
-		f.sortExpressions = append(f.sortExpressions, pq.QuoteIdentifier(column)+" ASC")
+		f.sortExpressions = append(f.sortExpressions, quoteIdentifier(column)+" ASC")
 	case strings.EqualFold(direction, "DESC"):
-		f.sortExpressions = append(f.sortExpressions, pq.QuoteIdentifier(column)+" DESC")
+		f.sortExpressions = append(f.sortExpressions, quoteIdentifier(column)+" DESC")
 	}
 
 	return f
@@ -147,8 +146,8 @@ func (f *feedQueryBuilder) GetFeeds() (model.Feeds, error) {
 			f.etag_header,
 			f.last_modified_header,
 			f.user_id,
-			f.checked_at at time zone u.timezone,
-			f.next_check_at at time zone u.timezone,
+			f.checked_at,
+			f.next_check_at,
 			f.parsing_error_count,
 			f.parsing_error_msg,
 			f.scraper_rules,

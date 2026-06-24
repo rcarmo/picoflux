@@ -5,32 +5,18 @@ services:
     restart: always
     ports:
       - "80:8080"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://miniflux:secret@db/miniflux?sslmode=disable
+      # Pure-Go SQLite backend: the database is a single file stored on a volume.
+      - DATABASE_URL=/data/nanoflux.db
       - RUN_MIGRATIONS=1
       - CREATE_ADMIN=1
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=test123
       - DEBUG=1
+    volumes:
+      - miniflux-db:/data
     # Optional health check:
     # healthcheck:
     #  test: ["CMD", "/usr/bin/miniflux", "-healthcheck", "auto"]
-  db:
-    image: postgres:latest
-    container_name: postgres
-    restart: always
-    environment:
-      - POSTGRES_USER=miniflux
-      - POSTGRES_PASSWORD=secret
-      - POSTGRES_DB=miniflux
-    volumes:
-      - miniflux-db:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "miniflux"]
-      interval: 10s
-      start_period: 30s
 volumes:
   miniflux-db:

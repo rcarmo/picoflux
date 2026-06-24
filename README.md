@@ -19,7 +19,7 @@ Features
 - Share individual articles publicly.
 - Fetches website icons (favicons).
 - Saves articles to third-party services.
-- Provides full-text search (powered by Postgres).
+- Provides full-text search (powered by SQLite FTS5 with BM25 ranking).
 - Available in 20 languages: Portuguese (Brazilian), Chinese (Simplified and Traditional), Dutch, English (US), Finnish, French, German, Greek, Hindi, Indonesian, Italian, Japanese, Polish, Romanian, Russian, Taiwanese POJ, Ukrainian, Spanish, and Turkish.
 
 ### Privacy and Security
@@ -90,7 +90,7 @@ Features
 
 - Written in [Go (Golang)](https://golang.org/).
 - Single binary compiled statically without dependency.
-- Works only with [PostgreSQL](https://www.postgresql.org/).
+- Uses an embedded, pure-Go [SQLite](https://www.sqlite.org/) database (via `modernc.org/sqlite`) — no external database server required.
 - Does not use any ORM or any complicated frameworks.
 - Uses modern vanilla JavaScript only when necessary.
 - All static files are bundled into the application binary using the Go `embed` package.

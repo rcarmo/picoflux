@@ -36,7 +36,6 @@ When reporting bugs:
 
 - **Git**
 - **Go >= 1.26**
-- **PostgreSQL**
 
 ### Getting Started
 
@@ -59,18 +58,16 @@ When reporting bugs:
 
 ### Database Setup
 
-For development and testing, you can run a local PostgreSQL database with Docker:
+Nanoflux uses an embedded, pure-Go SQLite database — there is no external
+database server to install or run. The database is a single file on disk,
+controlled by the `DATABASE_URL` environment variable (default: `nanoflux.db`
+in the working directory). Schema migrations are applied automatically with
+`RUN_MIGRATIONS=1` (or `miniflux -migrate`).
 
 ```bash
-# Start PostgreSQL container
-docker run --rm --name miniflux2-db -p 5432:5432 \
-  -e POSTGRES_DB=miniflux2 \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  postgres
+# Run with an explicit database file location
+DATABASE_URL=/tmp/nanoflux.db RUN_MIGRATIONS=1 make run
 ```
-
-You can also use an existing PostgreSQL instance. Make sure to set the `DATABASE_URL` environment variable accordingly.
 
 ## Development Workflow
 
@@ -161,7 +158,7 @@ When creating a pull request, please include:
 
 ### Integration Tests
 - Add integration tests for new API endpoints
-- Tests run against a real PostgreSQL database
+- Tests run against a real SQLite database (a temporary file per test)
 - Ensure tests clean up after themselves
 
 ## Communication

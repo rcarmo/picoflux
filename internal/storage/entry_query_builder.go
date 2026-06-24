@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib/pq"
-
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/timezone"
 )
@@ -46,13 +44,22 @@ func (e *EntryQueryBuilder) WithoutContent() *EntryQueryBuilder {
 func (e *EntryQueryBuilder) WithSearchQuery(query string) *EntryQueryBuilder {
 	if query != "" {
 		nArgs := len(e.args) + 1
-		e.conditions = append(e.conditions, fmt.Sprintf("e.document_vectors @@ websearch_to_tsquery($%d)", nArgs))
-		e.args = append(e.args, query)
+		// Restrict to entries matching the FTS5 index.
+		e.conditions = append(e.conditions,
+			fmt.Sprintf("e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH $%d)", nArgs),
+		)
+		e.args = append(e.args, toFTS5Query(query))
 
-		// 0.0000001 = 0.1 / (seconds_in_a_day)
-
+		// Rank by BM25 relevance (title weighted higher than content) with a small
+		// recency boost. BM25 returns lower (more negative) scores for better
+		// matches, so we add an age penalty in seconds and sort ascending.
+		// 0.0000001 = 0.1 / seconds_in_a_day, matching the previous ts_rank tuning.
 		e.sortExpressions = append(e.sortExpressions,
-			fmt.Sprintf("ts_rank(document_vectors, websearch_to_tsquery($%d)) - extract (epoch from now() - published_at)::float * 0.0000001 DESC", nArgs),
+			fmt.Sprintf(
+				"((SELECT bm25(entries_fts, 10.0, 1.0) FROM entries_fts WHERE entries_fts.rowid = e.id AND entries_fts MATCH $%d) "+
+					"+ (julianday('now') - julianday(e.published_at)) * 86400.0 * 0.0000001) ASC",
+				nArgs,
+			),
 		)
 	}
 	return e
@@ -61,9 +68,9 @@ func (e *EntryQueryBuilder) WithSearchQuery(query string) *EntryQueryBuilder {
 // WithStarred adds starred filter.
 func (e *EntryQueryBuilder) WithStarred(starred bool) *EntryQueryBuilder {
 	if starred {
-		e.conditions = append(e.conditions, "e.starred is true")
+		e.conditions = append(e.conditions, "e.starred = 1")
 	} else {
-		e.conditions = append(e.conditions, "e.starred is false")
+		e.conditions = append(e.conditions, "e.starred = 0")
 	}
 	return e
 }
@@ -120,8 +127,8 @@ func (e *EntryQueryBuilder) WithEntryIDs(entryIDs ...int64) *EntryQueryBuilder {
 		e.conditions = append(e.conditions, fmt.Sprintf("e.id = $%d", len(e.args)+1))
 		e.args = append(e.args, entryIDs[0])
 	} else if len(entryIDs) > 1 {
-		e.conditions = append(e.conditions, fmt.Sprintf("e.id = ANY($%d)", len(e.args)+1))
-		e.args = append(e.args, pq.Int64Array(entryIDs))
+		e.conditions = append(e.conditions, fmt.Sprintf("e.id IN (SELECT value FROM json_each($%d))", len(e.args)+1))
+		e.args = append(e.args, jsonIntArray(entryIDs))
 	}
 	return e
 }
@@ -150,8 +157,8 @@ func (e *EntryQueryBuilder) WithStatuses(statuses ...string) *EntryQueryBuilder 
 		e.conditions = append(e.conditions, fmt.Sprintf("e.status = $%d", len(e.args)+1))
 		e.args = append(e.args, statuses[0])
 	} else if len(statuses) > 1 {
-		e.conditions = append(e.conditions, fmt.Sprintf("e.status = ANY($%d)", len(e.args)+1))
-		e.args = append(e.args, pq.StringArray(statuses))
+		e.conditions = append(e.conditions, fmt.Sprintf("e.status IN (SELECT value FROM json_each($%d))", len(e.args)+1))
+		e.args = append(e.args, jsonStringArray(statuses))
 	}
 	return e
 }
@@ -159,8 +166,14 @@ func (e *EntryQueryBuilder) WithStatuses(statuses ...string) *EntryQueryBuilder 
 // WithTags filter by a list of entry tags.
 func (e *EntryQueryBuilder) WithTags(tags ...string) *EntryQueryBuilder {
 	if len(tags) > 0 {
-		e.conditions = append(e.conditions, fmt.Sprintf("LOWER(e.tags::text)::text[] @> LOWER($%d::text)::text[]", len(e.args)+1))
-		e.args = append(e.args, pq.Array(tags))
+		// Containment (@>): the entry must include every requested tag
+		// (case-insensitive). tags are stored as a JSON array in entries.tags.
+		e.conditions = append(e.conditions, fmt.Sprintf(
+			"NOT EXISTS (SELECT 1 FROM json_each($%d) needle "+
+				"WHERE lower(needle.value) NOT IN (SELECT lower(value) FROM json_each(e.tags)))",
+			len(e.args)+1,
+		))
+		e.args = append(e.args, jsonStringArray(tags))
 	}
 	return e
 }
@@ -191,9 +204,9 @@ func (e *EntryQueryBuilder) WithShareCodeNotEmpty() *EntryQueryBuilder {
 func (e *EntryQueryBuilder) WithSorting(column, direction string) *EntryQueryBuilder {
 	switch {
 	case strings.EqualFold(direction, "ASC"):
-		e.sortExpressions = append(e.sortExpressions, pq.QuoteIdentifier(column)+" ASC")
+		e.sortExpressions = append(e.sortExpressions, quoteIdentifier(column)+" ASC")
 	case strings.EqualFold(direction, "DESC"):
-		e.sortExpressions = append(e.sortExpressions, pq.QuoteIdentifier(column)+" DESC")
+		e.sortExpressions = append(e.sortExpressions, quoteIdentifier(column)+" DESC")
 	}
 
 	return e
@@ -224,8 +237,8 @@ func (e *EntryQueryBuilder) WithOffset(offset int) *EntryQueryBuilder {
 }
 
 func (e *EntryQueryBuilder) WithGloballyVisible() *EntryQueryBuilder {
-	e.conditions = append(e.conditions, "c.hide_globally IS FALSE")
-	e.conditions = append(e.conditions, "f.hide_globally IS FALSE")
+	e.conditions = append(e.conditions, "c.hide_globally = 0")
+	e.conditions = append(e.conditions, "f.hide_globally = 0")
 	return e
 }
 
@@ -295,7 +308,7 @@ func (e *EntryQueryBuilder) fetchEntries(withCount bool) (model.Entries, int, er
 			e.user_id,
 			e.feed_id,
 			e.hash,
-			e.published_at at time zone u.timezone,
+			e.published_at,
 			e.title,
 			e.url,
 			e.comments_url,
@@ -377,7 +390,7 @@ func (e *EntryQueryBuilder) fetchEntries(withCount bool) (model.Entries, int, er
 			&entry.ReadingTime,
 			&entry.CreatedAt,
 			&entry.ChangedAt,
-			pq.Array(&entry.Tags),
+			jsonScanStringSlice(&entry.Tags),
 			&entry.Feed.Title,
 			&entry.Feed.FeedURL,
 			&entry.Feed.SiteURL,

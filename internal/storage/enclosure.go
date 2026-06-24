@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"miniflux.app/v2/internal/model"
-
-	"github.com/lib/pq"
 )
 
 // EnclosuresByEntryID returns all enclosures for the given entry.
@@ -75,11 +73,11 @@ func (s *Storage) EnclosuresByEntryIDs(entryIDs []int64) (map[int64]model.Enclos
 		FROM
 			enclosures
 		WHERE
-			entry_id = ANY($1)
+			entry_id IN (SELECT value FROM json_each($1))
 		ORDER BY id ASC
 	`
 
-	rows, err := s.db.Query(query, pq.Array(entryIDs))
+	rows, err := s.db.Query(query, jsonIntArray(entryIDs))
 	if err != nil {
 		return nil, fmt.Errorf("store: unable to fetch enclosures: %w", err)
 	}
@@ -157,7 +155,7 @@ func (s *Storage) createEnclosure(tx *sql.Tx, enclosure *model.Enclosure) error 
 			(url, size, mime_type, entry_id, user_id, media_progression)
 		VALUES
 			($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (user_id, entry_id, encode(sha256(url::bytea), 'hex')) DO NOTHING
+		ON CONFLICT (user_id, entry_id, url) DO NOTHING
 		RETURNING
 			id
 	`
@@ -206,10 +204,10 @@ func (s *Storage) updateEnclosures(tx *sql.Tx, entry *model.Entry) error {
 		DELETE FROM
 			enclosures
 		WHERE
-			user_id=$1 AND entry_id=$2 AND url <> ALL($3)
+			user_id=$1 AND entry_id=$2 AND url NOT IN (SELECT value FROM json_each($3))
 	`
 
-	_, err := tx.Exec(query, entry.UserID, entry.ID, pq.Array(sqlValues))
+	_, err := tx.Exec(query, entry.UserID, entry.ID, jsonStringArray(sqlValues))
 	if err != nil {
 		return fmt.Errorf(`store: unable to delete old enclosures: %v`, err)
 	}

@@ -12,8 +12,6 @@ import (
 
 	"miniflux.app/v2/internal/crypto"
 	"miniflux.app/v2/internal/model"
-
-	"github.com/lib/pq"
 )
 
 // ErrEntryTombstoned is returned when an entry cannot be created because its
@@ -49,17 +47,15 @@ func (s *Storage) CountAllEntries() (map[string]int64, error) {
 
 // UpdateEntryTitleAndContent updates entry title and content.
 func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
-	truncatedTitle, truncatedContent := truncateTitleAndContentForTSVectorField(entry.Title, entry.Content)
 	query := `
 		UPDATE
 			entries
 		SET
 			title=$1,
 			content=$2,
-			reading_time=$3,
-			document_vectors = setweight(to_tsvector($4), 'A') || setweight(to_tsvector($5), 'B')
+			reading_time=$3
 		WHERE
-			id=$6 AND user_id=$7
+			id=$4 AND user_id=$5
 	`
 
 	if _, err := s.db.Exec(
@@ -67,8 +63,6 @@ func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
 		entry.Title,
 		entry.Content,
 		entry.ReadingTime,
-		truncatedTitle,
-		truncatedContent,
 		entry.ID,
 		entry.UserID); err != nil {
 		return fmt.Errorf(`store: unable to update entry #%d: %v`, entry.ID, err)
@@ -79,10 +73,12 @@ func (s *Storage) UpdateEntryTitleAndContent(entry *model.Entry) error {
 
 // createEntry add a new entry.
 func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
-	truncatedTitle, truncatedContent := truncateTitleAndContentForTSVectorField(entry.Title, entry.Content)
 	// The WHERE NOT EXISTS guard makes the tombstone check atomic with the insert, so a
 	// concurrent archive committing between an earlier existence check and this statement
 	// cannot bring a deleted entry back as unread.
+	//
+	// Full-text indexing is maintained automatically by the entries_fts AFTER triggers,
+	// so there is no document_vectors column to populate here.
 	query := `
 		INSERT INTO entries
 			(
@@ -97,7 +93,6 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 				feed_id,
 				reading_time,
 				changed_at,
-				document_vectors,
 				tags
 			)
 		SELECT
@@ -111,9 +106,8 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 			$8,
 			$9,
 			$10,
-			now(),
-			setweight(to_tsvector($11), 'A') || setweight(to_tsvector($12), 'B'),
-			$13
+			CURRENT_TIMESTAMP,
+			$11
 		WHERE NOT EXISTS (
 			SELECT 1 FROM entry_tombstones WHERE feed_id=$9 AND hash=$2
 		)
@@ -132,9 +126,7 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 		entry.UserID,
 		entry.FeedID,
 		entry.ReadingTime,
-		truncatedTitle,
-		truncatedContent,
-		pq.Array(entry.Tags),
+		jsonStringArray(entry.Tags),
 	).Scan(
 		&entry.ID,
 		&entry.Status,
@@ -164,7 +156,6 @@ func (s *Storage) createEntry(tx *sql.Tx, entry *model.Entry) error {
 // Note: we do not update the published date because some feeds do not contains any date,
 // it default to time.Now() which could change the order of items on the history page.
 func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
-	truncatedTitle, truncatedContent := truncateTitleAndContentForTSVectorField(entry.Title, entry.Content)
 	query := `
 		UPDATE
 			entries
@@ -175,10 +166,9 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 			content=$4,
 			author=$5,
 			reading_time=$6,
-			document_vectors = setweight(to_tsvector($7), 'A') || setweight(to_tsvector($8), 'B'),
-			tags=$12
+			tags=$7
 		WHERE
-			user_id=$9 AND feed_id=$10 AND hash=$11
+			user_id=$8 AND feed_id=$9 AND hash=$10
 		RETURNING
 			id
 	`
@@ -190,12 +180,10 @@ func (s *Storage) updateEntry(tx *sql.Tx, entry *model.Entry) error {
 		entry.Content,
 		entry.Author,
 		entry.ReadingTime,
-		truncatedTitle,
-		truncatedContent,
+		jsonStringArray(entry.Tags),
 		entry.UserID,
 		entry.FeedID,
 		entry.Hash,
-		pq.Array(entry.Tags),
 	).Scan(&entry.ID)
 	if err != nil {
 		return fmt.Errorf(`store: unable to update entry %q: %v`, entry.URL, err)
@@ -365,39 +353,72 @@ func (s *Storage) ArchiveEntries(status string, interval time.Duration, limit in
 		return 0, nil
 	}
 
-	query := `
-		WITH to_delete AS (
-			SELECT id, feed_id, hash
-			FROM entries
-			WHERE
-				status=$1 AND
-				starred is false AND
-				share_code='' AND
-				created_at < now() - $2::interval
-			ORDER BY created_at ASC
-			FOR UPDATE SKIP LOCKED
-			LIMIT $3
-		), deleted AS (
-			DELETE FROM entries
-			USING to_delete
-			WHERE entries.id = to_delete.id
-			RETURNING entries.feed_id, entries.hash
-		)
-		INSERT INTO entry_tombstones (feed_id, hash)
-		SELECT feed_id, hash FROM deleted WHERE hash <> ''
-		ON CONFLICT (feed_id, hash) DO NOTHING
-	`
-
 	days := max(int(interval/(24*time.Hour)), 1)
+	cutoff := fmt.Sprintf("-%d days", days)
 
-	result, err := s.db.Exec(query, status, fmt.Sprintf("%d days", days), limit)
+	// SQLite has no data-modifying CTEs, DELETE ... USING, or FOR UPDATE SKIP LOCKED.
+	// With a single writer we select the archivable rows, record tombstones, then
+	// delete them inside one transaction.
+	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, fmt.Errorf(`store: unable to archive %s entries: %v`, status, err)
+		return 0, fmt.Errorf(`store: unable to start transaction: %v`, err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query(`
+		SELECT id, feed_id, hash
+		FROM entries
+		WHERE
+			status=$1 AND
+			starred=0 AND
+			share_code='' AND
+			created_at < datetime('now', $2)
+		ORDER BY created_at ASC
+		LIMIT $3
+	`, status, cutoff, limit)
+	if err != nil {
+		return 0, fmt.Errorf(`store: unable to select archivable %s entries: %v`, status, err)
 	}
 
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf(`store: unable to get the number of rows affected: %v`, err)
+	type archivable struct {
+		id     int64
+		feedID int64
+		hash   string
+	}
+	var batch []archivable
+	for rows.Next() {
+		var a archivable
+		if err := rows.Scan(&a.id, &a.feedID, &a.hash); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf(`store: unable to scan archivable entry: %v`, err)
+		}
+		batch = append(batch, a)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf(`store: unable to iterate archivable entries: %v`, err)
+	}
+
+	var count int64
+	for _, a := range batch {
+		if a.hash != "" {
+			if _, err := tx.Exec(
+				`INSERT INTO entry_tombstones (feed_id, hash) VALUES ($1, $2) ON CONFLICT (feed_id, hash) DO NOTHING`,
+				a.feedID, a.hash,
+			); err != nil {
+				return 0, fmt.Errorf(`store: unable to record tombstone: %v`, err)
+			}
+		}
+		res, err := tx.Exec(`DELETE FROM entries WHERE id=$1`, a.id)
+		if err != nil {
+			return 0, fmt.Errorf(`store: unable to archive entry #%d: %v`, a.id, err)
+		}
+		n, _ := res.RowsAffected()
+		count += n
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf(`store: unable to commit archive of %s entries: %v`, status, err)
 	}
 
 	return count, nil
@@ -410,12 +431,12 @@ func (s *Storage) SetEntriesStatus(userID int64, entryIDs []int64, status string
 			entries
 		SET
 			status=$1,
-			changed_at=now()
+			changed_at=CURRENT_TIMESTAMP
 		WHERE
 			user_id=$2 AND
-			id=ANY($3)
+			id IN (SELECT value FROM json_each($3))
 		`
-	if _, err := s.db.Exec(query, status, userID, pq.Array(entryIDs)); err != nil {
+	if _, err := s.db.Exec(query, status, userID, jsonIntArray(entryIDs)); err != nil {
 		return fmt.Errorf(`store: unable to update entries statuses %v: %v`, entryIDs, err)
 	}
 
@@ -424,34 +445,49 @@ func (s *Storage) SetEntriesStatus(userID int64, entryIDs []int64, status string
 
 // SetEntriesStatusAndCountVisible updates the status of the given entries and returns how many are visible in global views.
 func (s *Storage) SetEntriesStatusAndCountVisible(userID int64, entryIDs []int64, status string) (int, error) {
-	query := `
-		WITH updated AS (
-			UPDATE entries
-			SET
-				status=$1,
-				changed_at=now()
-			WHERE
-				user_id=$2 AND
-				id=ANY($3)
-			RETURNING feed_id
-		)
-		SELECT count(*)
-		FROM updated u
-			JOIN feeds f ON (f.id = u.feed_id)
-			JOIN categories c ON (c.id = f.category_id)
-		WHERE NOT f.hide_globally AND NOT c.hide_globally
-	`
-	var visible int
-	if err := s.db.QueryRow(query, status, userID, pq.Array(entryIDs)).Scan(&visible); err != nil {
+	// SQLite does not support data-modifying CTEs (UPDATE ... RETURNING inside WITH),
+	// so the update and the visibility count run as two statements in one transaction.
+	ids := jsonIntArray(entryIDs)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf(`store: unable to start transaction: %v`, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		UPDATE entries
+		SET status=$1, changed_at=CURRENT_TIMESTAMP
+		WHERE user_id=$2 AND id IN (SELECT value FROM json_each($3))
+	`, status, userID, ids); err != nil {
 		return 0, fmt.Errorf(`store: unable to update entries status %v: %v`, entryIDs, err)
 	}
+
+	var visible int
+	if err := tx.QueryRow(`
+		SELECT count(*)
+		FROM entries e
+			JOIN feeds f ON f.id = e.feed_id
+			JOIN categories c ON c.id = f.category_id
+		WHERE e.user_id=$1
+			AND e.id IN (SELECT value FROM json_each($2))
+			AND f.hide_globally=0
+			AND c.hide_globally=0
+	`, userID, ids).Scan(&visible); err != nil {
+		return 0, fmt.Errorf(`store: unable to count visible entries %v: %v`, entryIDs, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf(`store: unable to commit entries status update %v: %v`, entryIDs, err)
+	}
+
 	return visible, nil
 }
 
 // SetEntriesStarredState updates the starred state for the given list of entries.
 func (s *Storage) SetEntriesStarredState(userID int64, entryIDs []int64, starred bool) error {
-	query := `UPDATE entries SET starred=$1, changed_at=now() WHERE user_id=$2 AND id=ANY($3)`
-	if _, err := s.db.Exec(query, starred, userID, pq.Array(entryIDs)); err != nil {
+	query := `UPDATE entries SET starred=$1, changed_at=CURRENT_TIMESTAMP WHERE user_id=$2 AND id IN (SELECT value FROM json_each($3))`
+	if _, err := s.db.Exec(query, starred, userID, jsonIntArray(entryIDs)); err != nil {
 		return fmt.Errorf(`store: unable to update the starred state %v: %v`, entryIDs, err)
 	}
 
@@ -460,7 +496,7 @@ func (s *Storage) SetEntriesStarredState(userID int64, entryIDs []int64, starred
 
 // ToggleStarred toggles entry starred value.
 func (s *Storage) ToggleStarred(userID int64, entryID int64) error {
-	query := `UPDATE entries SET starred = NOT starred, changed_at=now() WHERE user_id=$1 AND id=$2`
+	query := `UPDATE entries SET starred = NOT starred, changed_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND id=$2`
 	result, err := s.db.Exec(query, userID, entryID)
 	if err != nil {
 		return fmt.Errorf(`store: unable to toggle starred flag for entry #%d: %v`, entryID, err)
@@ -480,18 +516,31 @@ func (s *Storage) ToggleStarred(userID int64, entryID int64) error {
 
 // FlushHistory deletes all read entries (non-starred, non-shared) and records tombstones to prevent re-ingestion.
 func (s *Storage) FlushHistory(userID int64) error {
-	query := `
-		WITH deleted AS (
-			DELETE FROM entries
-			WHERE user_id=$1 AND status=$2 AND starred is false AND share_code=''
-			RETURNING feed_id, hash
-		)
+	// SQLite has no data-modifying CTEs: record tombstones, then delete, in one transaction.
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf(`store: unable to start transaction: %v`, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
 		INSERT INTO entry_tombstones (feed_id, hash)
-		SELECT feed_id, hash FROM deleted WHERE hash <> ''
+		SELECT feed_id, hash FROM entries
+		WHERE user_id=$1 AND status=$2 AND starred=0 AND share_code='' AND hash <> ''
 		ON CONFLICT (feed_id, hash) DO NOTHING
-	`
-	if _, err := s.db.Exec(query, userID, model.EntryStatusRead); err != nil {
+	`, userID, model.EntryStatusRead); err != nil {
+		return fmt.Errorf(`store: unable to record tombstones while flushing history: %v`, err)
+	}
+
+	if _, err := tx.Exec(`
+		DELETE FROM entries
+		WHERE user_id=$1 AND status=$2 AND starred=0 AND share_code=''
+	`, userID, model.EntryStatusRead); err != nil {
 		return fmt.Errorf(`store: unable to flush history: %v`, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf(`store: unable to commit history flush: %v`, err)
 	}
 
 	return nil
@@ -499,7 +548,7 @@ func (s *Storage) FlushHistory(userID int64) error {
 
 // MarkAllAsRead updates all user entries to the read status.
 func (s *Storage) MarkAllAsRead(userID int64) error {
-	query := `UPDATE entries SET status=$1, changed_at=now() WHERE user_id=$2 AND status=$3`
+	query := `UPDATE entries SET status=$1, changed_at=CURRENT_TIMESTAMP WHERE user_id=$2 AND status=$3`
 	result, err := s.db.Exec(query, model.EntryStatusRead, userID, model.EntryStatusUnread)
 	if err != nil {
 		return fmt.Errorf(`store: unable to mark all entries as read: %v`, err)
@@ -521,7 +570,7 @@ func (s *Storage) MarkAllAsReadBeforeDate(userID int64, before time.Time) error 
 			entries
 		SET
 			status=$1,
-			changed_at=now()
+			changed_at=CURRENT_TIMESTAMP
 		WHERE
 			user_id=$2 AND status=$3 AND published_at < $4
 	`
@@ -545,7 +594,7 @@ func (s *Storage) MarkGloballyVisibleFeedsAsRead(userID int64) error {
 			entries
 		SET
 			status=$1,
-			changed_at=now()
+			changed_at=CURRENT_TIMESTAMP
 		FROM
 			feeds
 		WHERE
@@ -575,7 +624,7 @@ func (s *Storage) MarkFeedAsRead(userID, feedID int64, before time.Time) error {
 			entries
 		SET
 			status=$1,
-			changed_at=now()
+			changed_at=CURRENT_TIMESTAMP
 		WHERE
 			user_id=$2 AND feed_id=$3 AND status=$4 AND published_at < $5
 	`
@@ -602,7 +651,7 @@ func (s *Storage) MarkCategoryAsRead(userID, categoryID int64, before time.Time)
 			entries
 		SET
 			status=$1,
-			changed_at=now()
+			changed_at=CURRENT_TIMESTAMP
 		FROM
 			feeds
 		WHERE
@@ -664,35 +713,4 @@ func (s *Storage) UnshareEntry(userID int64, entryID int64) (err error) {
 		err = fmt.Errorf(`store: unable to remove share code for entry #%d: %v`, entryID, err)
 	}
 	return
-}
-
-func truncateTitleAndContentForTSVectorField(title, content string) (string, string) {
-	// The length of a tsvector (lexemes + positions) must be less than 1 megabyte.
-	// We don't need to index the entire content, and we need to keep a buffer for the positions.
-	return truncateStringForTSVectorField(title, 200000), truncateStringForTSVectorField(content, 500000)
-}
-
-// truncateStringForTSVectorField truncates a string and don't break UTF-8 characters.
-func truncateStringForTSVectorField(s string, maxSize int) string {
-	if len(s) < maxSize {
-		return s
-	}
-
-	// Truncate to fit under the limit, ensuring we don't break UTF-8 characters
-	truncated := s[:maxSize-1]
-
-	// Walk backwards to find the last complete UTF-8 character
-	for i := len(truncated) - 1; i >= 0; i-- {
-		if (truncated[i] & 0x80) == 0 {
-			// ASCII character, we can stop here
-			return truncated[:i+1]
-		}
-		if (truncated[i] & 0xC0) == 0xC0 {
-			// Start of a multi-byte UTF-8 character
-			return truncated[:i]
-		}
-	}
-
-	// Fallback: return empty string if we can't find a valid UTF-8 boundary
-	return ""
 }

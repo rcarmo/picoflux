@@ -253,9 +253,9 @@ Minimum number of database connections\&.
 Default is 1\&.
 .TP
 .B DATABASE_URL
-PostgreSQL connection parameters\&.
+Path to the SQLite database file (pure-Go backend)\&.
 .br
-Default is "user=postgres password=postgres dbname=miniflux2 sslmode=disable"\&.
+Default is "nanoflux.db"\&.
 .TP
 .B DATABASE_URL_FILE
 Path to a secret key exposed as a file, it should contain the

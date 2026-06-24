@@ -12,7 +12,6 @@ import (
 	"miniflux.app/v2/internal/crypto"
 	"miniflux.app/v2/internal/model"
 
-	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -31,7 +30,7 @@ func (s *Storage) CountUsers() (int, error) {
 
 // SetLastLogin sets the user's last login timestamp to the current time.
 func (s *Storage) SetLastLogin(userID int64) error {
-	query := `UPDATE users SET last_login_at=now() WHERE id=$1`
+	query := `UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=$1`
 	_, err := s.db.Exec(query, userID)
 	if err != nil {
 		return fmt.Errorf(`store: unable to update last login date: %v`, err)
@@ -467,13 +466,13 @@ func (s *Storage) UserByField(field, value string) (*model.User, error) {
 		WHERE
 			%s=$1
 	`
-	return s.fetchUser(fmt.Sprintf(query, pq.QuoteIdentifier(field)), value)
+	return s.fetchUser(fmt.Sprintf(query, quoteIdentifier(field)), value)
 }
 
 // AnotherUserWithFieldExists returns true if a user other than userID has the given value in the given column.
 func (s *Storage) AnotherUserWithFieldExists(userID int64, field, value string) bool {
 	var result bool
-	query := `SELECT true FROM users WHERE id <> $1 AND ` + pq.QuoteIdentifier(field) + `=$2 LIMIT 1`
+	query := `SELECT true FROM users WHERE id <> $1 AND ` + quoteIdentifier(field) + `=$2 LIMIT 1`
 	s.db.QueryRow(query, userID, value).Scan(&result)
 	return result
 }

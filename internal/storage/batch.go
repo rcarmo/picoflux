@@ -54,12 +54,12 @@ func (b *batchBuilder) WithErrorLimit(limit int) *batchBuilder {
 }
 
 func (b *batchBuilder) WithNextCheckExpired() *batchBuilder {
-	b.conditions = append(b.conditions, "next_check_at < now()")
+	b.conditions = append(b.conditions, "next_check_at < CURRENT_TIMESTAMP")
 	return b
 }
 
 func (b *batchBuilder) WithoutDisabledFeeds() *batchBuilder {
-	b.conditions = append(b.conditions, "disabled IS false")
+	b.conditions = append(b.conditions, "disabled = 0")
 	return b
 }
 

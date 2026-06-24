@@ -171,16 +171,16 @@ func (s *Storage) WeeklyFeedEntryCount(userID, feedID int64) (int, error) {
 	// Return 0 when the 'count(*)' is zero(0) or one(1).
 	query := `
 		SELECT
-			COALESCE(CAST(CEIL(
-				(EXTRACT(epoch from interval '1 week'))	/
-				NULLIF((EXTRACT(epoch from (max(published_at)-min(published_at))/NULLIF((count(*)-1), 0) )), 0)
-			) AS BIGINT), 0)
+			COALESCE(-CAST(-(
+				604800.0 /
+				NULLIF((julianday(max(published_at)) - julianday(min(published_at))) * 86400.0 / NULLIF(count(*)-1, 0), 0)
+			) AS INTEGER), 0)
 		FROM
 			entries
 		WHERE
 			entries.user_id=$1 AND
 			entries.feed_id=$2 AND
-			entries.published_at >= now() - interval '1 week';
+			entries.published_at >= datetime('now', '-7 days');
 	`
 
 	var weeklyCount int
@@ -467,6 +467,6 @@ func (s *Storage) ResetFeedErrors() error {
 
 // ResetNextCheckAt schedules all feeds to be checked immediately.
 func (s *Storage) ResetNextCheckAt() error {
-	_, err := s.db.Exec(`UPDATE feeds SET next_check_at=now()`)
+	_, err := s.db.Exec(`UPDATE feeds SET next_check_at=CURRENT_TIMESTAMP`)
 	return err
 }

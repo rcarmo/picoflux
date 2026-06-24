@@ -3,10 +3,9 @@ DOCKER_IMAGE    := miniflux/miniflux
 VERSION         := $(shell git describe --tags --exact-match 2>/dev/null)
 LD_FLAGS        := "-s -w -X 'miniflux.app/v2/internal/version.Version=$(VERSION)'"
 PKG_LIST        := $(shell go list ./... | grep -v /vendor/)
-DB_URL          := postgres://postgres:postgres@localhost/miniflux_test?sslmode=disable
+DB_URL          := /tmp/nanoflux_test.db
 DOCKER_PLATFORM := amd64
 
-export PGPASSWORD := postgres
 
 .PHONY: \
 	miniflux \
@@ -107,8 +106,7 @@ lint:
 	golangci-lint run
 
 integration-test:
-	psql -U postgres -c 'drop database if exists miniflux_test;'
-	psql -U postgres -c 'create database miniflux_test;'
+	rm -f /tmp/nanoflux_test.db /tmp/nanoflux_test.db-wal /tmp/nanoflux_test.db-shm
 
 	DATABASE_URL=$(DB_URL) \
 	ADMIN_USERNAME=admin \
@@ -130,7 +128,7 @@ integration-test:
 clean-integration-test:
 	@ kill -9 `cat /tmp/miniflux.pid`
 	@ rm -f /tmp/miniflux.pid /tmp/miniflux.log
-	@ psql -U postgres -c 'drop database if exists miniflux_test;'
+	@ rm -f /tmp/nanoflux_test.db /tmp/nanoflux_test.db-wal /tmp/nanoflux_test.db-shm
 
 docker-image:
 	docker build --pull -t $(DOCKER_IMAGE):$(VERSION) -f packaging/docker/alpine/Dockerfile .

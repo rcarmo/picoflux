@@ -149,7 +149,7 @@ func (s *Storage) RotateWebSession(oldID string, session *model.WebSession) erro
 			secret_hash=$3,
 			user_id=$4,
 			state=$5,
-			created_at=now()
+			created_at=CURRENT_TIMESTAMP
 		WHERE
 			id=$1
 		RETURNING created_at
@@ -232,12 +232,12 @@ func (s *Storage) CleanOldWebSessions(interval time.Duration) (int64, error) {
 		DELETE FROM
 			web_sessions
 		WHERE
-			created_at < now() - $1::interval
+			created_at < datetime('now', $1)
 	`
 
 	days := max(int(interval/(24*time.Hour)), 1)
 
-	result, err := s.db.Exec(query, fmt.Sprintf("%d days", days))
+	result, err := s.db.Exec(query, fmt.Sprintf("-%d days", days))
 	if err != nil {
 		return 0, fmt.Errorf(`store: unable to clean old web sessions: %v`, err)
 	}

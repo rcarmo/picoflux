@@ -351,7 +351,7 @@ func TestDatabaseMinConnsOptionParsing(t *testing.T) {
 func TestDatabaseURLOptionParsing(t *testing.T) {
 	configParser := NewConfigParser()
 
-	if configParser.options.DatabaseURL() != "user=postgres password=postgres dbname=miniflux2 sslmode=disable" {
+	if configParser.options.DatabaseURL() != "nanoflux.db" {
 		t.Fatal("Expected DATABASE_URL to have default value")
 	}
 
@@ -359,12 +359,12 @@ func TestDatabaseURLOptionParsing(t *testing.T) {
 		t.Fatal("Expected DATABASE_URL to be the default value")
 	}
 
-	if err := configParser.parseLines([]string{"DATABASE_URL=postgres://user:pass@localhost/db"}); err != nil {
+	if err := configParser.parseLines([]string{"DATABASE_URL=/var/lib/nanoflux/data.db"}); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if configParser.options.DatabaseURL() != "postgres://user:pass@localhost/db" {
-		t.Fatal("Expected DATABASE_URL to be 'postgres://user:pass@localhost/db'")
+	if configParser.options.DatabaseURL() != "/var/lib/nanoflux/data.db" {
+		t.Fatal("Expected DATABASE_URL to be '/var/lib/nanoflux/data.db'")
 	}
 
 	if configParser.options.IsDefaultDatabaseURL() {

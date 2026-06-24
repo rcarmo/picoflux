@@ -23,7 +23,7 @@ func (s *Storage) APIKeyExists(userID int64, description string) bool {
 
 // SetAPIKeyUsedTimestamp updates the last used date of an API Key.
 func (s *Storage) SetAPIKeyUsedTimestamp(userID int64, token string) error {
-	query := `UPDATE api_keys SET last_used_at=now() WHERE user_id=$1 and token=$2`
+	query := `UPDATE api_keys SET last_used_at=CURRENT_TIMESTAMP WHERE user_id=$1 and token=$2`
 	_, err := s.db.Exec(query, userID, token)
 	if err != nil {
 		return fmt.Errorf(`store: unable to update last used date for API key: %v`, err)
