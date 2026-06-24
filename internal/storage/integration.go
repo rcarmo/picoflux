@@ -38,7 +38,7 @@ func (s *Storage) UserByFeverToken(token string) (*model.User, error) {
 		LEFT JOIN
 			integrations ON integrations.user_id=users.id
 		WHERE
-			integrations.fever_enabled='t' AND lower(integrations.fever_token)=lower($1)
+			integrations.fever_enabled=1 AND lower(integrations.fever_token)=lower($1)
 	`
 
 	var user model.User
@@ -63,7 +63,7 @@ func (s *Storage) GoogleReaderUserCheckPassword(username, password string) error
 		FROM
 			integrations
 		WHERE
-			integrations.googlereader_enabled='t' AND integrations.googlereader_username=$1
+			integrations.googlereader_enabled=1 AND integrations.googlereader_username=$1
 	`
 
 	err := s.db.QueryRow(query, username).Scan(&hash)
@@ -93,7 +93,7 @@ func (s *Storage) GoogleReaderUserGetIntegration(username string) (*model.Integr
 		FROM
 			integrations
 		WHERE
-			integrations.googlereader_enabled='t' AND integrations.googlereader_username=$1
+			integrations.googlereader_enabled=1 AND integrations.googlereader_username=$1
 	`
 
 	err := s.db.QueryRow(query, username).Scan(&integration.UserID, &integration.GoogleReaderEnabled, &integration.GoogleReaderUsername, &integration.GoogleReaderPassword)
@@ -646,30 +646,30 @@ func (s *Storage) HasSaveEntry(userID int64) (result bool) {
 			user_id=$1
 		AND
 			(
-				pinboard_enabled='t' OR
-				instapaper_enabled='t' OR
-				wallabag_enabled='t' OR
-				notion_enabled='t' OR
-				nunux_keeper_enabled='t' OR
-				espial_enabled='t' OR
-				readwise_enabled='t' OR
-				linkace_enabled='t' OR
-				linkding_enabled='t' OR
-				linktaco_enabled='t' OR
-				linkwarden_enabled='t' OR
-				apprise_enabled='t' OR
-				shiori_enabled='t' OR
-				readeck_enabled='t' OR
-				shaarli_enabled='t' OR
-				webhook_enabled='t' OR
-				omnivore_enabled='t' OR
-				karakeep_enabled='t' OR
-				raindrop_enabled='t' OR
-				betula_enabled='t' OR
-				cubox_enabled='t' OR
-				discord_enabled='t' OR
-				slack_enabled='t' OR
-				archiveorg_enabled='t'
+				pinboard_enabled=1 OR
+				instapaper_enabled=1 OR
+				wallabag_enabled=1 OR
+				notion_enabled=1 OR
+				nunux_keeper_enabled=1 OR
+				espial_enabled=1 OR
+				readwise_enabled=1 OR
+				linkace_enabled=1 OR
+				linkding_enabled=1 OR
+				linktaco_enabled=1 OR
+				linkwarden_enabled=1 OR
+				apprise_enabled=1 OR
+				shiori_enabled=1 OR
+				readeck_enabled=1 OR
+				shaarli_enabled=1 OR
+				webhook_enabled=1 OR
+				omnivore_enabled=1 OR
+				karakeep_enabled=1 OR
+				raindrop_enabled=1 OR
+				betula_enabled=1 OR
+				cubox_enabled=1 OR
+				discord_enabled=1 OR
+				slack_enabled=1 OR
+				archiveorg_enabled=1
 			)
 	`
 	if err := s.db.QueryRow(query, userID).Scan(&result); err != nil {
