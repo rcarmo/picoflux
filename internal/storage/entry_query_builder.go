@@ -200,13 +200,38 @@ func (e *EntryQueryBuilder) WithShareCodeNotEmpty() *EntryQueryBuilder {
 	return e
 }
 
+// entrySortColumns maps the user-facing entry sort column names to fully
+// qualified SQL expressions for the joined query used by GetEntries/GetEntry
+// (entries e, feeds f, categories c, feed_icons fi, icons i, users u).
+//
+// Several of these names (id, title, status, created_at, ...) exist on more
+// than one joined table, so a bare column reference is ambiguous in SQLite
+// (PostgreSQL resolved it to the SELECT-list output column, SQLite does not).
+// Qualifying them with the owning table alias keeps ORDER BY unambiguous.
+var entrySortColumns = map[string]string{
+	"id":             "e.id",
+	"status":         "e.status",
+	"changed_at":     "e.changed_at",
+	"published_at":   "e.published_at",
+	"created_at":     "e.created_at",
+	"title":          "e.title",
+	"author":         "e.author",
+	"category_title": "c.title",
+	"category_id":    "f.category_id",
+}
+
 // WithSorting add a sort expression.
 func (e *EntryQueryBuilder) WithSorting(column, direction string) *EntryQueryBuilder {
+	expr, ok := entrySortColumns[column]
+	if !ok {
+		expr = quoteIdentifier(column)
+	}
+
 	switch {
 	case strings.EqualFold(direction, "ASC"):
-		e.sortExpressions = append(e.sortExpressions, quoteIdentifier(column)+" ASC")
+		e.sortExpressions = append(e.sortExpressions, expr+" ASC")
 	case strings.EqualFold(direction, "DESC"):
-		e.sortExpressions = append(e.sortExpressions, quoteIdentifier(column)+" DESC")
+		e.sortExpressions = append(e.sortExpressions, expr+" DESC")
 	}
 
 	return e
