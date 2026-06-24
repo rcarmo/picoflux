@@ -32,6 +32,31 @@ var migrations = []func(tx *sql.Tx) error{
 		_, err := tx.Exec(schemaSQLite)
 		return err
 	},
+	// v2: add indices for foreign-key / lookup columns that SQLite does not
+	// index automatically and that back real query paths.
+	func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			-- webauthn_credentials are looked up and deleted by user_id (login,
+			-- credential management) and cascade-deleted with the user.
+			CREATE INDEX IF NOT EXISTS webauthn_credentials_user_id_idx
+				ON webauthn_credentials (user_id);
+
+			-- feed_icons primary key is (feed_id, icon_id); icon_id is not the
+			-- leftmost column, so reverse lookups (orphan-icon cleanup, icon
+			-- cascade) had no usable index.
+			CREATE INDEX IF NOT EXISTS feed_icons_icon_id_idx
+				ON feed_icons (icon_id);
+
+			-- Fever and Google Reader API authentication run on every request and
+			-- look these columns up directly; partial indices keep them tiny by
+			-- excluding the many disabled (default) rows.
+			CREATE INDEX IF NOT EXISTS integrations_fever_token_idx
+				ON integrations (fever_token) WHERE fever_enabled=1;
+			CREATE INDEX IF NOT EXISTS integrations_googlereader_username_idx
+				ON integrations (googlereader_username) WHERE googlereader_enabled=1;
+		`)
+		return err
+	},
 }
 
 const schemaSQLite = `
