@@ -1,20 +1,112 @@
-Miniflux 2
-==========
+picoflux
+========
 
-Miniflux is a minimalist and opinionated feed reader.
-It's simple, fast, lightweight and super easy to install.
+**picoflux is a fork of [Miniflux 2](https://github.com/miniflux/v2) that replaces PostgreSQL with an embedded, pure-Go SQLite database.**
 
-Official website: <https://miniflux.app>
+The goal is to keep everything that makes Miniflux great — a minimalist, fast,
+opinionated feed reader — while removing the only piece of operational
+overhead it had: the external database server. picoflux stores everything in a
+single SQLite file, so the whole application is one static binary plus one
+database file.
+
+> [!NOTE]
+> This is an unofficial, community-maintained fork. It is **not** affiliated
+> with or endorsed by the upstream Miniflux project. For the original,
+> PostgreSQL-backed application and its official support, documentation, and
+> hosting, please use [Miniflux](https://miniflux.app).
+
+How picoflux differs from Miniflux
+----------------------------------
+
+- **Embedded SQLite instead of PostgreSQL.** The storage layer uses the
+  pure-Go [`modernc.org/sqlite`](https://pkg.go.dev/modernc.org/sqlite) driver
+  (no CGo, no `libpq`), so there is no database server to install, configure,
+  back up, or keep running. Point `DATABASE_URL` at a file path and go.
+- **WAL by default.** Connections are opened in WAL mode with a busy timeout
+  and foreign-key enforcement, tuned for a single-writer, server-style
+  workload.
+- **Full-text search via SQLite FTS5 + BM25.** Search is powered by an FTS5
+  virtual table with weighted `bm25()` ranking (title weighted above body)
+  and a recency boost, maintained automatically by triggers — replacing the
+  Postgres `tsvector`/`ts_rank` machinery.
+- **Single consolidated schema.** The 132 incremental Postgres migrations are
+  collapsed into one SQLite baseline, versioned with `PRAGMA user_version`.
+- **Trivial cross-compilation.** Because the build is CGo-free, every release
+  artifact is produced from the same source with `CGO_ENABLED=0`.
+
+Everything else — the UI, the REST/Fever/Google Reader APIs, integrations,
+scrapers, authentication, and configuration — is inherited from Miniflux and
+behaves the same way.
+
+### Migrating from Miniflux
+
+There is **no automatic migration** from an existing PostgreSQL Miniflux
+database to picoflux. picoflux starts a fresh SQLite database; re-import your
+feeds via OPML.
+
+Installation
+------------
+
+picoflux is configured exactly like Miniflux, except `DATABASE_URL` is a path
+to a SQLite file instead of a Postgres connection string.
+
+```bash
+# Run migrations and create the first admin user, then start the server.
+DATABASE_URL=/var/lib/picoflux/picoflux.db \
+RUN_MIGRATIONS=1 \
+CREATE_ADMIN=1 \
+ADMIN_USERNAME=admin \
+ADMIN_PASSWORD=changeme \
+picoflux
+```
+
+Container images and binaries are published from this repository (see
+[Releases & CI](#releases--ci)). A minimal Compose setup is just the app —
+there is no database service:
+
+```yaml
+services:
+  picoflux:
+    image: ghcr.io/rcarmo/picoflux:latest
+    ports:
+      - "80:8080"
+    environment:
+      - DATABASE_URL=/data/picoflux.db
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeme
+    volumes:
+      - picoflux-data:/data
+volumes:
+  picoflux-data:
+```
+
+Releases & CI
+-------------
+
+Release automation lives in `.github/workflows/` and is triggered **only by
+`vX.X.X` version tags** (e.g. `v2.3.0`):
+
+- **`release.yml`** cross-compiles static binaries for `linux/amd64`,
+  `linux/arm64`, `darwin/amd64`, and `darwin/arm64`, attaches them (with
+  SHA-256 checksums) to the GitHub release.
+- **`docker.yml`** builds and publishes multi-arch container images to the
+  GitHub Container Registry at `ghcr.io/rcarmo/picoflux`:
+    - **Alpine:** `amd64, 386, arm/v6, arm/v7, arm64, riscv64, ppc64le, s390x`
+    - **Distroless** (`-distroless` tag): `amd64, arm/v7, arm64, ppc64le, riscv64, s390x`
 
 Features
 --------
+
+These are inherited from Miniflux.
 
 ### Feed Reader
 
 - Supported feed formats: Atom 0.3/1.0, RSS 1.0/2.0, and JSON Feed 1.0/1.1.
 - [OPML](https://en.wikipedia.org/wiki/OPML) file import/export and URL import.
 - Supports multiple attachments (podcasts, videos, music, and images enclosures).
-- Plays videos from YouTube directly inside Miniflux.
+- Plays videos from YouTube directly inside the reader.
 - Organizes articles using categories and bookmarks.
 - Share individual articles publicly.
 - Fetches website icons (favicons).
@@ -34,7 +126,7 @@ Features
 - Supports alternative YouTube video players such as [Invidious](https://invidio.us).
 - Blocks external JavaScript to prevent tracking and enhance security.
 - Sanitizes external content before rendering it.
-- Enforces a [Content Security](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) and a [Trusted Types Policy](https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API) to only application JavaScript and blocks inline scripts and styles. 
+- Enforces a [Content Security](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) and a [Trusted Types Policy](https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API) to only application JavaScript and blocks inline scripts and styles.
 
 ### Bot Protection Bypass Mechanisms
 
@@ -102,9 +194,8 @@ Features
 - Uses native lazy loading for images and iframes.
 - Compatible only with modern browsers.
 - Adheres to the [Twelve-Factor App](https://12factor.net/) methodology.
-- Provides official Debian/RPM packages and pre-built binaries.
-- Publishes a Docker image to Docker Hub, GitHub Registry, and Quay.io Registry, with ARM and RISC-V architecture support.
-- Uses a limited amount of third-party go dependencies
+- Publishes multi-arch Docker images to the GitHub Container Registry, plus pre-built binaries, with ARM, RISC-V, ppc64le and s390x architecture support.
+- Uses a limited amount of third-party go dependencies.
 - Has a comprehensive testsuite, with both unit tests and integration tests.
 - Only uses a couple of MB of memory and a negligible amount of CPU, even with several hundreds of feeds.
 - Respects/sends Last-Modified, If-Modified-Since, If-None-Match, Cache-Control, Expires and ETags headers, and has a default polling interval of 1h.
@@ -112,22 +203,19 @@ Features
 Documentation
 -------------
 
-The Miniflux documentation is available here: <https://miniflux.app/docs/> ([Man page](https://miniflux.app/miniflux.1.html))
+Because picoflux is API- and configuration-compatible with Miniflux (apart
+from `DATABASE_URL`), the upstream Miniflux documentation applies:
+<https://miniflux.app/docs/> ([Man page](https://miniflux.app/miniflux.1.html))
 
 - [Opinionated?](https://miniflux.app/opinionated.html)
 - [Features](https://miniflux.app/features.html)
-- [Requirements](https://miniflux.app/docs/requirements.html)
-- [Installation Instructions](https://miniflux.app/docs/installation.html)
-- [Upgrading to a New Version](https://miniflux.app/docs/upgrade.html)
-- [Configuration](https://miniflux.app/docs/configuration.html)
+- [Configuration](https://miniflux.app/docs/configuration.html) — note `DATABASE_URL` is a SQLite file path here
 - [Command Line Usage](https://miniflux.app/docs/cli.html)
 - [User Interface Usage](https://miniflux.app/docs/ui.html)
 - [Keyboard Shortcuts](https://miniflux.app/docs/keyboard_shortcuts.html)
 - [Integration with External Services](https://miniflux.app/docs/#integrations)
 - [Rewrite and Scraper Rules](https://miniflux.app/docs/rules.html)
 - [API Reference](https://miniflux.app/docs/api.html)
-- [Development](https://miniflux.app/docs/development.html)
-- [Internationalization](https://miniflux.app/docs/i18n.html)
 - [Frequently Asked Questions](https://miniflux.app/faq.html)
 
 Screenshots
@@ -144,5 +232,11 @@ Dark theme when using keyboard navigation:
 Credits
 -------
 
-- Authors: Frédéric Guillot - [List of contributors](https://github.com/miniflux/v2/graphs/contributors)
-- Distributed under Apache 2.0 License
+picoflux stands entirely on the shoulders of Miniflux.
+
+- **Upstream Miniflux** — created by Frédéric Guillot and
+  [contributors](https://github.com/miniflux/v2/graphs/contributors).
+  All of the feed-reading application is their work.
+- **picoflux fork** (SQLite backend, CI/CD) — maintained by Rui Carmo and
+  contributors.
+- Distributed under the Apache 2.0 License, the same as upstream Miniflux.
