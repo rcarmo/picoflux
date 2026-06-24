@@ -1,0 +1,79 @@
+name: Release Binaries
+
+# Modeled on rcarmo/vibes' release workflow: triggered by published releases,
+# version tags, or manually. The pure-Go SQLite backend (modernc.org/sqlite)
+# means every target builds with CGO_ENABLED=0, so cross-compilation to ARM64
+# and Intel is trivial and reproducible.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64    # Intel / AMD 64-bit
+          - goos: linux
+            goarch: arm64    # ARM64 (aarch64)
+          - goos: darwin
+            goarch: amd64    # Intel macOS
+          - goos: darwin
+            goarch: arm64    # Apple Silicon (ARM64)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history so `git describe --tags` resolves the version
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          VERSION="$(git describe --tags --always --dirty)"
+          OUT="picoflux-${GOOS}-${GOARCH}"
+          echo "Building ${OUT} (version ${VERSION})"
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X 'miniflux.app/v2/internal/version.Version=${VERSION}'" \
+            -o "${OUT}" .
+          sha256sum "${OUT}" > "${OUT}.sha256"
+          file "${OUT}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: picoflux-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}
+            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          if-no-files-found: error
+
+      - name: Attach binaries to the GitHub release
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}
+            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
