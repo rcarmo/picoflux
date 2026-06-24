@@ -171,6 +171,15 @@ func Parse() {
 		printErrorAndExit(err)
 	}
 
+	// picoflux uses an embedded, single-file SQLite database: there is no shared
+	// database server and therefore no multi-instance migration race. Bring the
+	// schema up to date automatically on every startup so subcommands like
+	// -create-admin and the daemon itself always have a ready schema. Migrate is
+	// idempotent (it checks PRAGMA user_version and only applies what is missing).
+	if err := database.Migrate(db); err != nil {
+		printErrorAndExit(err)
+	}
+
 	if flagMigrate {
 		if err := database.Migrate(db); err != nil {
 			printErrorAndExit(err)
@@ -212,7 +221,8 @@ func Parse() {
 		return
 	}
 
-	// Run migrations and start the daemon.
+	// Migrations already ran automatically above; RunMigrations remains honored
+	// for compatibility but is now a no-op (Migrate is idempotent).
 	if config.Opts.RunMigrations() {
 		if err := database.Migrate(db); err != nil {
 			printErrorAndExit(err)
