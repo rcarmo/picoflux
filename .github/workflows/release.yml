@@ -1,17 +1,16 @@
 name: Release Binaries
 
-# Modeled on rcarmo/vibes' release workflow: triggered by published releases,
-# version tags, or manually. The pure-Go SQLite backend (modernc.org/sqlite)
-# means every target builds with CGO_ENABLED=0, so cross-compilation to ARM64
-# and Intel is trivial and reproducible.
+# Modeled on rcarmo/vibes' release workflow. Triggered only by vX.X.X version
+# tags (e.g. v1.2.3), it cross-compiles statically linked binaries.
+# The pure-Go SQLite backend (modernc.org/sqlite) means every target builds
+# with CGO_ENABLED=0, so cross-compilation to ARM64 and Intel is trivial and
+# reproducible. softprops/action-gh-release creates the release for the tag
+# and attaches the binaries.
 
 on:
-  release:
-    types: [published]
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: write
@@ -71,7 +70,6 @@ jobs:
           if-no-files-found: error
 
       - name: Attach binaries to the GitHub release
-        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
