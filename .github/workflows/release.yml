@@ -1,11 +1,11 @@
 name: Release Binaries
 
 # Modeled on rcarmo/vibes' release workflow. Triggered only by vX.X.X version
-# tags (e.g. v1.2.3), it cross-compiles statically linked binaries.
-# The pure-Go SQLite backend (modernc.org/sqlite) means every target builds
-# with CGO_ENABLED=0, so cross-compilation to ARM64 and Intel is trivial and
-# reproducible. softprops/action-gh-release creates the release for the tag
-# and attaches the binaries.
+# tags (e.g. v1.2.3). The matrix cross-compiles statically linked binaries
+# (pure-Go modernc.org/sqlite => CGO_ENABLED=0, so ARM64/Intel cross-compiles
+# trivially) and uploads them as artifacts. A final job then publishes a
+# single GitHub release containing every binary plus an auto-generated list of
+# the commits included since the previous tag.
 
 on:
   push:
@@ -69,9 +69,56 @@ jobs:
             picoflux-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
           if-no-files-found: error
 
-      - name: Attach binaries to the GitHub release
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history so the changelog range can be computed
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true    # flatten every artifact into dist/
+
+      - name: Generate changelog
+        run: |
+          set -euo pipefail
+          CURRENT="${GITHUB_REF_NAME}"
+          PREV="$(git describe --tags --abbrev=0 "${CURRENT}^" 2>/dev/null || true)"
+
+          {
+            echo "## picoflux ${CURRENT}"
+            echo
+            echo "Static binaries for Linux and macOS (Intel + ARM64) are attached below,"
+            echo "each with a matching \`.sha256\` checksum."
+            echo
+            echo "### Commits"
+            echo
+            if [ -n "${PREV}" ]; then
+              echo "_Changes since ${PREV}:_"
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${PREV}..${CURRENT}"
+            else
+              echo "_Initial release — 40 most recent commits:_"
+              echo
+              git log --no-merges -n 40 --pretty='- %s (%h)' "${CURRENT}"
+            fi
+            echo
+          } > CHANGELOG_RELEASE.md
+
+          echo "----- generated release body -----"
+          cat CHANGELOG_RELEASE.md
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          name: picoflux ${{ github.ref_name }}
+          body_path: CHANGELOG_RELEASE.md
+          generate_release_notes: true    # append GitHub's auto notes (contributors / full changelog link)
           files: |
-            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}
-            picoflux-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+            dist/picoflux-*
