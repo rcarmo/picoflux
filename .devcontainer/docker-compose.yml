@@ -9,7 +9,7 @@ services:
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=test123
       # Pure-Go SQLite backend: the database is a single file inside the workspace.
-      - DATABASE_URL=/workspace/nanoflux.db
+      - DATABASE_URL=/workspace/picoflux.db
   apprise:
     image: caronc/apprise:1.0
     restart: unless-stopped

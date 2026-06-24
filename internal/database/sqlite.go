@@ -42,7 +42,7 @@ func normalizeDSN(dsn string) string {
 	dsn = strings.TrimPrefix(dsn, "sqlite://")
 	dsn = strings.TrimPrefix(dsn, "sqlite3://")
 	if dsn == "" {
-		dsn = "nanoflux.db"
+		dsn = "picoflux.db"
 	}
 
 	separator := "?"

@@ -183,8 +183,8 @@ func NewConfigOptions() *configOptions {
 				},
 			},
 			"DATABASE_URL": {
-				parsedStringValue: "nanoflux.db",
-				rawValue:          "nanoflux.db",
+				parsedStringValue: "picoflux.db",
+				rawValue:          "picoflux.db",
 				valueType:         stringType,
 				secret:            true,
 			},
@@ -811,7 +811,7 @@ func (c *configOptions) IsAuthProxyUserCreationAllowed() bool {
 }
 
 func (c *configOptions) IsDefaultDatabaseURL() bool {
-	return c.options["DATABASE_URL"].rawValue == "nanoflux.db"
+	return c.options["DATABASE_URL"].rawValue == "picoflux.db"
 }
 
 func (c *configOptions) IsOAuth2UserCreationAllowed() bool {

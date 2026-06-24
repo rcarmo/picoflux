@@ -60,13 +60,13 @@ When reporting bugs:
 
 Nanoflux uses an embedded, pure-Go SQLite database — there is no external
 database server to install or run. The database is a single file on disk,
-controlled by the `DATABASE_URL` environment variable (default: `nanoflux.db`
+controlled by the `DATABASE_URL` environment variable (default: `picoflux.db`
 in the working directory). Schema migrations are applied automatically with
 `RUN_MIGRATIONS=1` (or `miniflux -migrate`).
 
 ```bash
 # Run with an explicit database file location
-DATABASE_URL=/tmp/nanoflux.db RUN_MIGRATIONS=1 make run
+DATABASE_URL=/tmp/picoflux.db RUN_MIGRATIONS=1 make run
 ```
 
 ## Development Workflow

@@ -351,7 +351,7 @@ func TestDatabaseMinConnsOptionParsing(t *testing.T) {
 func TestDatabaseURLOptionParsing(t *testing.T) {
 	configParser := NewConfigParser()
 
-	if configParser.options.DatabaseURL() != "nanoflux.db" {
+	if configParser.options.DatabaseURL() != "picoflux.db" {
 		t.Fatal("Expected DATABASE_URL to have default value")
 	}
 
@@ -359,12 +359,12 @@ func TestDatabaseURLOptionParsing(t *testing.T) {
 		t.Fatal("Expected DATABASE_URL to be the default value")
 	}
 
-	if err := configParser.parseLines([]string{"DATABASE_URL=/var/lib/nanoflux/data.db"}); err != nil {
+	if err := configParser.parseLines([]string{"DATABASE_URL=/var/lib/picoflux/data.db"}); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if configParser.options.DatabaseURL() != "/var/lib/nanoflux/data.db" {
-		t.Fatal("Expected DATABASE_URL to be '/var/lib/nanoflux/data.db'")
+	if configParser.options.DatabaseURL() != "/var/lib/picoflux/data.db" {
+		t.Fatal("Expected DATABASE_URL to be '/var/lib/picoflux/data.db'")
 	}
 
 	if configParser.options.IsDefaultDatabaseURL() {

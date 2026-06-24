@@ -7,7 +7,7 @@ services:
       - "80:8080"
     environment:
       # Pure-Go SQLite backend: the database is a single file stored on a volume.
-      - DATABASE_URL=/data/nanoflux.db
+      - DATABASE_URL=/data/picoflux.db
       - RUN_MIGRATIONS=1
       - CREATE_ADMIN=1
       - ADMIN_USERNAME=admin

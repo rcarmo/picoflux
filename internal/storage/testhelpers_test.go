@@ -18,7 +18,7 @@ import (
 func newTestStore(t *testing.T) *Storage {
 	t.Helper()
 
-	dbPath := filepath.Join(t.TempDir(), "nanoflux-test.db")
+	dbPath := filepath.Join(t.TempDir(), "picoflux-test.db")
 	db, err := database.NewConnectionPool(dbPath, 1, 1, time.Minute)
 	if err != nil {
 		t.Fatalf("unable to open test database: %v", err)
