@@ -1,11 +1,11 @@
 name: Release Binaries
 
-# Modeled on rcarmo/vibes' release workflow. Triggered only by vX.X.X version
-# tags (e.g. v1.2.3). The matrix cross-compiles statically linked binaries
-# (pure-Go modernc.org/sqlite => CGO_ENABLED=0, so ARM64/Intel cross-compiles
-# trivially) and uploads them as artifacts. A final job then publishes a
-# single GitHub release containing every binary plus an auto-generated list of
-# the commits included since the previous tag.
+# Modeled on rcarmo/piclaw's publish workflow: each binary is built on a native
+# runner for its target (no cross-compilation), so ARM64 artifacts are produced
+# on ARM64 runners and Intel/AMD artifacts on x64 runners. Triggered only by
+# vX.X.X version tags (e.g. v1.2.3). A final job gathers every artifact and
+# publishes one GitHub release with the binaries and an auto-generated commit
+# list.
 
 on:
   push:
@@ -17,20 +17,24 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - goos: linux
-            goarch: amd64    # Intel / AMD 64-bit
+            goarch: amd64     # Intel / AMD 64-bit
+            runner: ubuntu-24.04
           - goos: linux
-            goarch: arm64    # ARM64 (aarch64)
+            goarch: arm64     # ARM64 (aarch64) — native ARM runner
+            runner: ubuntu-24.04-arm
           - goos: darwin
-            goarch: amd64    # Intel macOS
+            goarch: amd64     # Intel macOS
+            runner: macos-13
           - goos: darwin
-            goarch: arm64    # Apple Silicon (ARM64)
+            goarch: arm64     # Apple Silicon (ARM64) — native ARM runner
+            runner: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,12 +56,17 @@ jobs:
           set -euo pipefail
           VERSION="$(git describe --tags --always --dirty)"
           OUT="picoflux-${GOOS}-${GOARCH}"
-          echo "Building ${OUT} (version ${VERSION})"
+          echo "Building ${OUT} (version ${VERSION}) natively on ${{ matrix.runner }}"
           go build \
             -trimpath \
             -ldflags "-s -w -X 'miniflux.app/v2/internal/version.Version=${VERSION}'" \
             -o "${OUT}" .
-          sha256sum "${OUT}" > "${OUT}.sha256"
+          # Checksums: Linux runners have sha256sum, macOS runners have shasum.
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${OUT}" > "${OUT}.sha256"
+          else
+            shasum -a 256 "${OUT}" > "${OUT}.sha256"
+          fi
           file "${OUT}"
 
       - name: Upload workflow artifact
