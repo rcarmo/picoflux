@@ -57,6 +57,17 @@ var migrations = []func(tx *sql.Tx) error{
 		`)
 		return err
 	},
+	// v3: index the starred-by-recency path. Starred views filter on
+	// (user_id, starred) and order by published_at; without published_at in the
+	// index SQLite resolves the ORDER BY with a temporary B-tree whose cost
+	// grows with the user's total entry count, not the number of starred items.
+	func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE INDEX IF NOT EXISTS entries_user_starred_published_idx
+				ON entries (user_id, starred, published_at);
+		`)
+		return err
+	},
 }
 
 const schemaSQLite = `
