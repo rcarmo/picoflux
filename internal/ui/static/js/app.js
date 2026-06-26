@@ -281,6 +281,85 @@ function showToastNotification(iconType, notificationMessage) {
  * @param {string} page - The page to navigate to.
  * @param {boolean} reloadOnFail - If true, reload the current page if the target page is not found.
  */
+/**
+ * Client-side reading history ("grace period" navigation).
+ *
+ * In the entry view, the server-rendered previous/next links are computed from
+ * the current list filter (e.g. unread). Once an entry is marked read it leaves
+ * that set, so the server "previous" link skips it and you can no longer step
+ * back to an entry you just read -- annoying when you overshoot with n/j.
+ *
+ * To fix this without any server change we keep a small per-tab stack of the
+ * entry URLs actually visited, in order, in sessionStorage. Previous/next then
+ * walk that stack first (immune to read-status filtering) and only fall back to
+ * the server links at the edges of the stack (new territory).
+ */
+const READING_HISTORY_KEY = "picoflux:reading-history";
+const READING_HISTORY_MAX = 100;
+
+function readingHistoryLoad() {
+    try {
+        const raw = sessionStorage.getItem(READING_HISTORY_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.urls)) return parsed;
+        }
+    } catch (e) { /* sessionStorage unavailable or corrupt */ }
+    return { urls: [], index: -1 };
+}
+
+function readingHistorySave(state) {
+    try {
+        sessionStorage.setItem(READING_HISTORY_KEY, JSON.stringify(state));
+    } catch (e) { /* ignore quota/availability errors */ }
+}
+
+/**
+ * Record the current entry page in the reading history. No-op outside the
+ * entry view. Detects back/forward moves within the existing stack and only
+ * grows the stack when navigating to genuinely new entries.
+ */
+function recordReadingHistory() {
+    if (!isEntryView()) return;
+
+    const url = window.location.pathname + window.location.search;
+    const state = readingHistoryLoad();
+    const { urls, index } = state;
+
+    if (index >= 0 && urls[index] === url) {
+        return; // reload of the current entry
+    } else if (index > 0 && urls[index - 1] === url) {
+        state.index = index - 1; // stepped back within the stack
+    } else if (index >= 0 && index < urls.length - 1 && urls[index + 1] === url) {
+        state.index = index + 1; // stepped forward within the stack
+    } else {
+        // New entry: drop any forward history and push it on top.
+        const trimmed = urls.slice(0, index + 1);
+        trimmed.push(url);
+        while (trimmed.length > READING_HISTORY_MAX) trimmed.shift();
+        state.urls = trimmed;
+        state.index = trimmed.length - 1;
+    }
+
+    readingHistorySave(state);
+}
+
+/**
+ * Navigate within the reading history.
+ *
+ * @param {number} direction -1 for previous, +1 for next.
+ * @returns {boolean} true if it navigated, false if at the edge of the stack.
+ */
+function readingHistoryGo(direction) {
+    const state = readingHistoryLoad();
+    const target = state.index + direction;
+    if (target >= 0 && target < state.urls.length) {
+        document.location.href = state.urls[target];
+        return true;
+    }
+    return false;
+}
+
 function goToPage(page, reloadOnFail = false) {
     const element = document.querySelector(`:is(a, button)[data-page=${page}]`);
 
@@ -306,7 +385,7 @@ function goToPreviousPage(offset) {
     if (offset instanceof KeyboardEvent) offset = -1;
     if (isListView()) {
         goToListItem(offset);
-    } else {
+    } else if (!readingHistoryGo(-1)) {
         goToPage("previous");
     }
 }
@@ -326,7 +405,7 @@ function goToNextPage(offset) {
     if (offset instanceof KeyboardEvent) offset = 1;
     if (isListView()) {
         goToListItem(offset);
-    } else {
+    } else if (!readingHistoryGo(1)) {
         goToPage("next");
     }
 }
@@ -1291,6 +1370,7 @@ initializeKeyboardShortcuts();
 initializeTouchHandler();
 initializeClickHandlers();
 initializeServiceWorker();
+recordReadingHistory();
 
 // Reload the page if it was restored from the back-forward cache and mark entries as read is enabled.
 window.addEventListener("pageshow", (event) => {
