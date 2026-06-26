@@ -350,20 +350,61 @@ function recordReadingHistory() {
  * @param {number} direction -1 for previous, +1 for next.
  * @returns {boolean} true if it navigated, false if at the edge of the stack.
  */
-function readingHistoryGo(direction) {
+function readingHistoryTarget(direction) {
     const state = readingHistoryLoad();
     const target = state.index + direction;
-    if (target >= 0 && target < state.urls.length) {
-        document.location.href = state.urls[target];
+    if (target >= 0 && target < state.urls.length) return state.urls[target];
+    return null;
+}
+
+function readingHistoryGo(direction) {
+    const url = readingHistoryTarget(direction);
+    if (url) {
+        document.location.href = url;
         return true;
     }
     return false;
 }
 
+function readingHistoryDirectionFromPage(page) {
+    if (page === "previous") return -1;
+    if (page === "next") return 1;
+    return 0;
+}
+
+function updateReadingHistoryPaginationLinks() {
+    if (!isEntryView()) return;
+
+    for (const [page, direction, selector, rel] of [
+        ["previous", -1, ".pagination-prev", "prev"],
+        ["next", 1, ".pagination-next", "next"],
+    ]) {
+        const url = readingHistoryTarget(direction);
+        if (!url) continue;
+
+        const container = document.querySelector(selector);
+        if (!container) continue;
+
+        let link = container.querySelector(`a[data-page=${page}]`);
+        if (!link) {
+            const label = container.textContent.trim();
+            container.textContent = "";
+            link = document.createElement("a");
+            link.dataset.page = page;
+            link.rel = rel;
+            link.textContent = label;
+            container.appendChild(link);
+        }
+
+        link.href = url;
+        container.classList.remove("disabled");
+    }
+}
+
 function goToPage(page, reloadOnFail = false) {
     if (isEntryView()) {
-        if (page === "previous" && readingHistoryGo(-1)) return;
-        if (page === "next" && readingHistoryGo(1)) return;
+        const direction = readingHistoryDirectionFromPage(page);
+        if (direction !== 0 && readingHistoryGo(direction)) return;
     }
 
     const element = document.querySelector(`:is(a, button)[data-page=${page}]`);
@@ -1355,6 +1396,20 @@ function initializeClickHandlers() {
         });
     });
 
+    // Entry-view previous/next links should use the same client-side
+    // reading-history grace period as keyboard and touch navigation. Leave
+    // modifier clicks and non-left clicks alone so users can still open links
+    // in a new tab/window through the browser's native behavior.
+    onClick(":is(a, button)[data-page=previous], :is(a, button)[data-page=next]", (event) => {
+        if (!isEntryView()) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        const direction = readingHistoryDirectionFromPage(event.currentTarget.dataset.page);
+        if (direction !== 0 && readingHistoryGo(direction)) {
+            event.preventDefault();
+        }
+    }, true);
+
     // Original link handlers (both click and middle-click)
     const handleOriginalLink = (event) => handleEntryStatus("next", event.target, true);
 
@@ -1373,9 +1428,10 @@ initializeMediaPlayerHandlers();
 initializeWebAuthn();
 initializeKeyboardShortcuts();
 initializeTouchHandler();
+recordReadingHistory();
+updateReadingHistoryPaginationLinks();
 initializeClickHandlers();
 initializeServiceWorker();
-recordReadingHistory();
 
 // Reload the page if it was restored from the back-forward cache and mark entries as read is enabled.
 window.addEventListener("pageshow", (event) => {
