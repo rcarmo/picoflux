@@ -361,6 +361,11 @@ function readingHistoryGo(direction) {
 }
 
 function goToPage(page, reloadOnFail = false) {
+    if (isEntryView()) {
+        if (page === "previous" && readingHistoryGo(-1)) return;
+        if (page === "next" && readingHistoryGo(1)) return;
+    }
+
     const element = document.querySelector(`:is(a, button)[data-page=${page}]`);
 
     if (element) {
