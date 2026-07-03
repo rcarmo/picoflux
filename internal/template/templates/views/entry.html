@@ -282,7 +282,11 @@
     {{ end }}
 
     {{ if .user }}
-        {{ safeHTML (proxyFilter .entry.Content) }}
+        {{ if eq .user.Theme "eink" }}
+            {{ safeHTML (einkImageFilter .entry.Content) }}
+        {{ else }}
+            {{ safeHTML (proxyFilter .entry.Content) }}
+        {{ end }}
     {{ else }}
         {{ safeHTML .entry.Content }}
     {{ end }}

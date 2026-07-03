@@ -107,6 +107,7 @@ func Serve(store *storage.Storage, pool *worker.Pool) http.Handler {
 
 	// Media proxy.
 	mux.HandleFunc("GET /proxy/{encodedDigest}/{encodedURL}", handler.mediaProxy)
+	mux.HandleFunc("GET /eink-image/{encodedDigest}/{encodedURL}", handler.einkImage)
 
 	// Share pages.
 	mux.HandleFunc("POST /entry/share/{entryID}", handler.createSharedEntry)

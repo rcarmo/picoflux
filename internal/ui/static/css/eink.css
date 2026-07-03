@@ -116,34 +116,22 @@ button.link {
     border: 1px solid #000;
 }
 
-/* On-the-fly image adaptation for e-ink: grayscale + high contrast + no
- * saturation. This is client-side only and reversible per image through JS
- * (tap/click toggles .image-adaptation-off). */
+/* Article images are adapted server-side in this theme (downscaled, grayscale,
+ * contrast-stretched JPEGs). They remain clickable: JS swaps an individual
+ * image between the adapted local rendition and the original source URL. */
 .entry-content img,
 .entry-content picture img,
 .entry-content figure img,
-.entry-content video,
-.entry-content canvas,
-.entry-enclosures img,
-.entry-enclosures video {
-    filter: grayscale(1) contrast(1.45) brightness(1.08);
-    mix-blend-mode: multiply;
+.entry-enclosures img {
     background: #fff;
+    border: 1px solid #000;
+    cursor: zoom-in;
 }
 
 .entry-content img.image-adaptation-off,
 .entry-content picture img.image-adaptation-off,
 .entry-content figure img.image-adaptation-off,
 .entry-enclosures img.image-adaptation-off {
-    filter: none;
-    mix-blend-mode: normal;
-}
-
-.entry-content img {
-    cursor: zoom-in;
-}
-
-.entry-content img.image-adaptation-off {
     cursor: zoom-out;
 }
 

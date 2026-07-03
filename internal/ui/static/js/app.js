@@ -374,10 +374,23 @@ function readingHistoryDirectionFromPage(page) {
 
 function initializeEInkImageAdaptationToggle() {
     document.querySelectorAll(".entry-content img, .entry-enclosures img").forEach((image) => {
-        image.title = image.title || "Click to toggle e-ink image adaptation";
+        if (!image.dataset.originalSrc) return;
+
+        image.dataset.adaptedSrc = image.currentSrc || image.src;
+        if (image.srcset) {
+            image.dataset.adaptedSrcset = image.srcset;
+        }
+        image.title = image.title || "Click to toggle the original image";
         image.addEventListener("click", (event) => {
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            image.classList.toggle("image-adaptation-off");
+
+            if (image.classList.toggle("image-adaptation-off")) {
+                image.src = image.dataset.originalSrc;
+                if (image.dataset.originalSrcset) image.srcset = image.dataset.originalSrcset;
+            } else {
+                image.src = image.dataset.adaptedSrc;
+                if (image.dataset.adaptedSrcset) image.srcset = image.dataset.adaptedSrcset;
+            }
         });
     });
 }

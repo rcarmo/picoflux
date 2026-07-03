@@ -44,7 +44,8 @@ func isPublicRoute(r *http.Request) bool {
 
 	return strings.HasPrefix(path, "/oauth2/") && (strings.HasSuffix(path, "/redirect") || strings.HasSuffix(path, "/callback")) ||
 		strings.HasPrefix(path, "/share/") ||
-		strings.HasPrefix(path, "/proxy/")
+		strings.HasPrefix(path, "/proxy/") ||
+		strings.HasPrefix(path, "/eink-image/")
 }
 
 // loginRedirectURL builds the login page URL with the given request URI
