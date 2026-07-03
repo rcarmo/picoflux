@@ -4,11 +4,24 @@
 package mediaproxy // import "miniflux.app/v2/internal/mediaproxy"
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"miniflux.app/v2/internal/config"
 )
 
 func TestRewriteDocumentWithEInkImageProxyURL(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("MEDIA_PROXY_PRIVATE_KEY", "test")
+
+	var err error
+	parser := config.NewConfigParser()
+	config.Opts, err = parser.ParseEnvironmentVariables()
+	if err != nil {
+		t.Fatalf(`Config parsing failure: %v`, err)
+	}
+
 	input := `<p><img src="https://example.org/image.jpg" srcset="https://example.org/image-small.jpg 1x, https://example.org/image-large.jpg 2x"><img src="/local.png"></p>`
 	output := RewriteDocumentWithEInkImageProxyURL(input)
 
