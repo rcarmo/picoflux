@@ -372,6 +372,16 @@ function readingHistoryDirectionFromPage(page) {
     return 0;
 }
 
+function initializeEInkImageAdaptationToggle() {
+    document.querySelectorAll(".entry-content img, .entry-enclosures img").forEach((image) => {
+        image.title = image.title || "Click to toggle e-ink image adaptation";
+        image.addEventListener("click", (event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            image.classList.toggle("image-adaptation-off");
+        });
+    });
+}
+
 function updateReadingHistoryPaginationLinks() {
     if (!isEntryView()) return;
 
@@ -1430,6 +1440,7 @@ initializeKeyboardShortcuts();
 initializeTouchHandler();
 recordReadingHistory();
 updateReadingHistoryPaginationLinks();
+initializeEInkImageAdaptationToggle();
 initializeClickHandlers();
 initializeServiceWorker();
 

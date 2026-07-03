@@ -12,6 +12,7 @@ func Themes() map[string]string {
 		"dark_sans_serif":   "Dark - Sans Serif",
 		"system_serif":      "System - Serif",
 		"system_sans_serif": "System - Sans Serif",
+		"eink":              "E-ink / Tablet",
 	}
 }
 
@@ -28,6 +29,8 @@ func ThemeColor(theme, colorScheme string) string {
 			return "#222"
 		}
 
+		return "#fff"
+	case "eink":
 		return "#fff"
 	default:
 		return "#fff"
