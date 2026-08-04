@@ -1,7 +1,29 @@
-FROM docker.io/library/golang:trixie AS build
+# syntax=docker/dockerfile:1.7
+
+ARG BUILDPLATFORM=linux/amd64
+
+# Compile on BUILDPLATFORM and target GOOS/GOARCH directly. picoflux uses the
+# pure-Go modernc SQLite driver, so CGO and target emulation are unnecessary.
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:trixie AS build
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG VERSION=dev
+
 ADD . /go/src/app
 WORKDIR /go/src/app
-RUN make picoflux
+
+RUN set -eux; \
+    case "${TARGETARCH}/${TARGETVARIANT}" in \
+        arm/v6) export GOARM=6 ;; \
+        arm/v7) export GOARM=7 ;; \
+        *) unset GOARM ;; \
+    esac; \
+    CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+        go build \
+        -ldflags="-s -w -X miniflux.app/v2/internal/version.Version=${VERSION}" \
+        -o /out/picoflux .
 
 FROM gcr.io/distroless/base-debian13:nonroot
 
@@ -15,5 +37,6 @@ LABEL org.opencontainers.image.documentation=https://miniflux.app/docs/
 
 EXPOSE 8080
 ENV LISTEN_ADDR=0.0.0.0:8080
-COPY --from=build /go/src/app/picoflux /usr/bin/picoflux
+
+COPY --from=build /out/picoflux /usr/bin/picoflux
 CMD ["/usr/bin/picoflux"]

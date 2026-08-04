@@ -1,8 +1,38 @@
-FROM docker.io/library/golang:alpine3.23 AS build
-RUN apk add --no-cache build-base git make
+# syntax=docker/dockerfile:1.7
+
+ARG BUILDPLATFORM=linux/amd64
+
+# Build on the native BuildKit host architecture and cross-compile the pure-Go
+# picoflux binary for the requested target. No target binary is executed here,
+# so multi-arch builds do not need QEMU.
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:alpine3.23 AS build
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG VERSION=dev
+
+RUN apk add --no-cache git make
+
 ADD . /go/src/app
 WORKDIR /go/src/app
-RUN make picoflux
+
+RUN set -eux; \
+    case "${TARGETARCH}/${TARGETVARIANT}" in \
+        arm/v6) export GOARM=6 ;; \
+        arm/v7) export GOARM=7 ;; \
+        *) unset GOARM ;; \
+    esac; \
+    CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
+        go build \
+        -ldflags="-s -w -X miniflux.app/v2/internal/version.Version=${VERSION}" \
+        -o /out/picoflux .
+
+# ca-certificates and tzdata contain architecture-independent data. Prepare
+# them once on BUILDPLATFORM, then copy them into the target stage without
+# running apk under emulation.
+FROM --platform=$BUILDPLATFORM docker.io/library/alpine:3.23 AS runtime-data
+RUN apk add --no-cache ca-certificates tzdata
 
 FROM docker.io/library/alpine:3.23
 
@@ -16,7 +46,10 @@ LABEL org.opencontainers.image.documentation=https://miniflux.app/docs/
 
 EXPOSE 8080
 ENV LISTEN_ADDR=0.0.0.0:8080
-RUN apk --no-cache add ca-certificates tzdata
-COPY --from=build /go/src/app/picoflux /usr/bin/picoflux
+
+COPY --from=runtime-data /etc/ssl/certs/ /etc/ssl/certs/
+COPY --from=runtime-data /usr/share/zoneinfo/ /usr/share/zoneinfo/
+COPY --from=build /out/picoflux /usr/bin/picoflux
+
 USER 65534
 CMD ["/usr/bin/picoflux"]
