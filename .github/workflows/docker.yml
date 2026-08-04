@@ -76,7 +76,9 @@ jobs:
         with:
           context: .
           file: ./packaging/docker/alpine/Dockerfile
-          platforms: linux/amd64,linux/386,linux/arm/v6,linux/arm/v7,linux/arm64,linux/riscv64,linux/ppc64le,linux/s390x
+          # Intentionally omit linux/386, linux/ppc64le, and linux/s390x: we do not deploy them,
+          # and emulating them under QEMU significantly delays multi-arch manifest publication.
+          platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64,linux/riscv64
           push: true
           tags: ${{ steps.docker_alpine_tags.outputs.tags }}
           labels: ${{ steps.docker_alpine_tags.outputs.labels }}
@@ -88,7 +90,8 @@ jobs:
         with:
           context: .
           file: ./packaging/docker/distroless/Dockerfile
-          platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/ppc64le,linux/riscv64,linux/s390x
+          # Keep the Distroless target set aligned with the architectures we actually use.
+          platforms: linux/amd64,linux/arm/v7,linux/arm64,linux/riscv64
           push: true
           tags: ${{ steps.docker_distroless_tags.outputs.tags }}
           labels: ${{ steps.docker_distroless_tags.outputs.labels }}
