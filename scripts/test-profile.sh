@@ -2,6 +2,13 @@
 set -uo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+export PROJECT_TMP_ROOT=${PROJECT_TMP_ROOT:-/workspace/tmp/picoflux}
+export TMPDIR="$PROJECT_TMP_ROOT/runs/tests/$(date -u +%Y%m%dT%H%M%S)-$$"
+export TMP="$TMPDIR" TEMP="$TMPDIR"
+export GOCACHE="$PROJECT_TMP_ROOT/cache/go-build"
+export GOMODCACHE="$PROJECT_TMP_ROOT/cache/go-mod"
+export GOBIN="$PROJECT_TMP_ROOT/build/bin"
+mkdir -p "$TMPDIR" "$GOCACHE" "$GOMODCACHE" "$GOBIN"
 run="$root/.profiles/$(date -u +%Y%m%dT%H%M%S)-$$"
 mkdir -p "$run"
 echo "Profiles: $run"

@@ -1,6 +1,9 @@
 name: Tests
 permissions: read-all
 
+env:
+  PROJECT_TMP_ROOT: ${{ runner.temp }}/picoflux
+
 on:
   pull_request:
     branches:

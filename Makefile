@@ -1,9 +1,27 @@
+# Disposable output only; retained .profiles evidence is never cleaned here.
+PROJECT_TMP_ROOT ?= /workspace/tmp/picoflux
+export PROJECT_TMP_ROOT
+export TMPDIR := $(PROJECT_TMP_ROOT)/runs/tools
+export TMP := $(TMPDIR)
+export TEMP := $(TMPDIR)
+export GOCACHE := $(PROJECT_TMP_ROOT)/cache/go-build
+export GOMODCACHE := $(PROJECT_TMP_ROOT)/cache/go-mod
+export GOBIN := $(PROJECT_TMP_ROOT)/build/bin
+export BUN_INSTALL_CACHE_DIR := $(PROJECT_TMP_ROOT)/cache/bun
+export npm_config_cache := $(PROJECT_TMP_ROOT)/cache/npm
+export PYTHONPYCACHEPREFIX := $(PROJECT_TMP_ROOT)/cache/python
+export UV_CACHE_DIR := $(PROJECT_TMP_ROOT)/cache/uv
+export PLAYWRIGHT_BROWSERS_PATH := $(PROJECT_TMP_ROOT)/cache/playwright
+$(shell mkdir -p $(TMPDIR) $(GOCACHE) $(GOMODCACHE) $(GOBIN))
+INTEGRATION_RUN := $(PROJECT_TMP_ROOT)/runs/integration
+$(shell mkdir -p $(INTEGRATION_RUN))
+
 APP             := picoflux
 DOCKER_IMAGE    := ghcr.io/rcarmo/picoflux
 VERSION         := $(shell git describe --tags --exact-match 2>/dev/null)
 LD_FLAGS        := "-s -w -X 'miniflux.app/v2/internal/version.Version=$(VERSION)'"
 PKG_LIST        := $(shell go list ./... | grep -v /vendor/)
-DB_URL          := /tmp/picoflux_test.db
+DB_URL          := $(INTEGRATION_RUN)/picoflux_test.db
 DOCKER_PLATFORM := amd64
 
 
@@ -106,7 +124,7 @@ lint:
 	golangci-lint run
 
 integration-test:
-	rm -f /tmp/picoflux_test.db /tmp/picoflux_test.db-wal /tmp/picoflux_test.db-shm
+	rm -f $(INTEGRATION_RUN)/picoflux_test.db $(INTEGRATION_RUN)/picoflux_test.db-wal $(INTEGRATION_RUN)/picoflux_test.db-shm
 
 	DATABASE_URL=$(DB_URL) \
 	ADMIN_USERNAME=admin \
@@ -116,7 +134,7 @@ integration-test:
 	LOG_LEVEL=debug \
 	FETCHER_ALLOW_PRIVATE_NETWORKS=1 \
 	INTEGRATION_ALLOW_PRIVATE_NETWORKS=1 \
-	go run main.go >/tmp/picoflux.log 2>&1 & echo "$$!" > "/tmp/picoflux.pid"
+	go run main.go >$(INTEGRATION_RUN)/picoflux.log 2>&1 & echo "$$!" > "$(INTEGRATION_RUN)/picoflux.pid"
 
 	while ! nc -z localhost 8080; do sleep 1; done
 
@@ -126,9 +144,9 @@ integration-test:
 	TEST_PACKAGES=./internal/api scripts/test-profile.sh -v
 
 clean-integration-test:
-	@ kill -9 `cat /tmp/picoflux.pid`
-	@ rm -f /tmp/picoflux.pid /tmp/picoflux.log
-	@ rm -f /tmp/picoflux_test.db /tmp/picoflux_test.db-wal /tmp/picoflux_test.db-shm
+	@ kill -9 `cat $(INTEGRATION_RUN)/picoflux.pid`
+	@ rm -f $(INTEGRATION_RUN)/picoflux.pid $(INTEGRATION_RUN)/picoflux.log
+	@ rm -f $(INTEGRATION_RUN)/picoflux_test.db $(INTEGRATION_RUN)/picoflux_test.db-wal $(INTEGRATION_RUN)/picoflux_test.db-shm
 
 docker-image:
 	docker build --pull -t $(DOCKER_IMAGE):$(VERSION) -f packaging/docker/alpine/Dockerfile .
