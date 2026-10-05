@@ -5,12 +5,13 @@ cd "$root"
 run="$root/.profiles/$(date -u +%Y%m%dT%H%M%S)-$$"
 mkdir -p "$run"
 echo "Profiles: $run"
+{ git rev-parse HEAD; go version; printf "packages=%s flags=%s heap_sampling=%s\n" "${TEST_PACKAGES:-./...}" "$*" "${MEMPROFILE_RATE:-1}"; } > "$run/metadata.txt"
 packages=${TEST_PACKAGES:-./...}
 rc=0
 for pkg in $(go list $packages); do
   dir="$run/${pkg//\//_}"
   mkdir -p "$dir"
-  go test -count=1 -cpuprofile="$dir/cpu.pprof" -memprofile="$dir/heap.pprof" -memprofilerate=1 -o "$dir/test.bin" "$@" "$pkg" >"$dir/test.log" 2>&1
+  go test -count=1 -cpuprofile="$dir/cpu.pprof" -memprofile="$dir/heap.pprof" -memprofilerate=${MEMPROFILE_RATE:-1} -o "$dir/test.bin" "$@" "$pkg" >"$dir/test.log" 2>&1
   result=$?
   cat "$dir/test.log"
   if ((result != 0)); then rc=1; fi

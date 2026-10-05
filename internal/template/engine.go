@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"embed"
 	"html/template"
+	"sync"
 	"time"
 
 	"miniflux.app/v2/internal/locale"
@@ -22,6 +23,7 @@ var viewTemplateFiles embed.FS
 type Engine struct {
 	templates map[string]*template.Template
 	funcMap   *funcMap
+	localized sync.Map
 }
 
 // NewEngine returns a new template engine.
@@ -33,6 +35,7 @@ func NewEngine(basePath string) *Engine {
 }
 
 func (e *Engine) ParseTemplates() {
+	e.localized.Clear()
 	funcMap := e.funcMap.Map()
 	templates := map[string][]string{ // this isn't a global variable so that it can be garbage-collected.
 		"about.html":               {"layout.html", "settings_menu.html"},
@@ -94,23 +97,24 @@ func (e *Engine) Render(name string, data map[string]any) []byte {
 		panic("The template " + name + " does not exists.")
 	}
 
-	// Clone the template so the per-request, language-specific functions below
-	// are bound on a private copy. The shared template stored in e.templates is
-	// only ever cloned (never executed directly), so concurrent requests no
-	// longer race on its function map, which previously could cause a response
-	// to be rendered with another concurrent request's language.
-	tpl = template.Must(tpl.Clone())
-
-	printer := locale.NewPrinter(data["language"].(string))
-
-	// Functions that need to be declared at runtime.
-	tpl.Funcs(template.FuncMap{
-		"elapsed": func(timezone string, t time.Time) string {
-			return elapsedTime(printer, timezone, t)
-		},
-		"t":      printer.Printf,
-		"plural": printer.Plural,
-	})
+	// Publish immutable per-view/language templates. Request handlers never
+	// mutate their function maps, preserving concurrent locale isolation.
+	key := struct{ view, language string }{name, data["language"].(string)}
+	if cached, found := e.localized.Load(key); found {
+		tpl = cached.(*template.Template)
+	} else {
+		printer := locale.NewPrinter(key.language)
+		localized := template.Must(tpl.Clone())
+		localized.Funcs(template.FuncMap{
+			"elapsed": func(timezone string, t time.Time) string {
+				return elapsedTime(printer, timezone, t)
+			},
+			"t":      printer.Printf,
+			"plural": printer.Plural,
+		})
+		actual, _ := e.localized.LoadOrStore(key, localized)
+		tpl = actual.(*template.Template)
+	}
 
 	var b bytes.Buffer
 	if err := tpl.ExecuteTemplate(&b, "base", data); err != nil {

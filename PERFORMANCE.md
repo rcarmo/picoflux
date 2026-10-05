@@ -38,3 +38,27 @@ is already covered by entries_user_status_changed_published_idx. This reduces
 index maintenance/storage without removing a lookup capability. The PostgreSQL
 bytea enclosure index change is deliberately not applied: SQLite already indexes
 URLs directly and has no PostgreSQL btree tuple-size constraint.
+
+## Template rendering follow-up
+
+Immutable per-view/language templates are now cached after locale bindings are
+installed, avoiding request-time cloning without sharing mutable function maps.
+The cache is cleared when templates are reparsed. Profiled race tests pass.
+
+Parallel 100-row render workload, three three-second runs, CPU capture plus
+512 KiB heap sampling on both baseline and candidate:
+
+- Baseline: 31.7–32.9 us/op, 29.4 KB/op, 728 allocations/op.
+- Cached: 27.0–32.5 us/op, 17.3 KB/op, 623 allocations/op.
+
+The clear result is ~41% fewer bytes and 105 fewer allocations per request;
+latency ranges overlap, so no robust throughput speedup is claimed. Full
+allocation sampling heavily distorts execution timings and was not used for
+latency acceptance. Remaining profiles are dominated by html/template execution,
+not clone setup. Replacing the safe template engine is not justified by this
+bounded benchmark.
+
+Full suite rerun with CPU/heap capture after changes, with retained cumulative
+CPU/alloc_space/alloc_objects tables. Short unit tests can have empty CPU samples;
+the representative rendering benchmarks provide usable CPU evidence. Test
+fixtures and profiler overhead remain distinct from application hotspots.
