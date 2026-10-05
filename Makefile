@@ -1,10 +1,14 @@
 # Disposable output only; retained .profiles evidence is never cleaned here.
 # Resolve once with the original TMPDIR still available. Explicit unsafe
 # overrides fail instead of falling back. The resolver is vendored for portability.
+export PROJECT_ORIGINAL_TMPDIR := $(if $(filter undefined,$(origin PROJECT_ORIGINAL_TMPDIR)),$(TMPDIR),$(PROJECT_ORIGINAL_TMPDIR))
+ifneq ($(origin PROJECT_TMP_BASE),undefined)
+TMP_BASE_OVERRIDE := PROJECT_TMP_BASE='$(PROJECT_TMP_BASE)'
+endif
 ifneq ($(origin PROJECT_TMP_ROOT),undefined)
 TMP_OVERRIDE := PROJECT_TMP_ROOT='$(PROJECT_TMP_ROOT)'
 endif
-RESOLVED_TMP_ROOT := $(shell $(TMP_OVERRIDE) PROJECT=picoflux bash scripts/project-tmp.sh init | sed -n 's/^PROJECT_TMP_ROOT=//p')
+RESOLVED_TMP_ROOT := $(shell $(TMP_BASE_OVERRIDE) $(TMP_OVERRIDE) PROJECT_ORIGINAL_TMPDIR='$(PROJECT_ORIGINAL_TMPDIR)' PROJECT=picoflux bash scripts/project-tmp.sh init | sed -n 's/^PROJECT_TMP_ROOT=//p')
 ifeq ($(strip $(RESOLVED_TMP_ROOT)),)
 $(error Unable to resolve a safe picoflux temporary root)
 endif

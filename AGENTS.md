@@ -18,31 +18,31 @@ Do not claim the profiling gate passed when evidence is absent.
 Preserve SQLite migrations, pure-Go builds, picoflux branding, and tag-only
 release workflows when adopting upstream Miniflux changes.
 
-## Project cache and temporary-file policy
+## Portable project caches and scratch
 
-Canonical project name: **picoflux** (repository checkout may be named nanoflux).
-All disposable output belongs under `/workspace/tmp/picoflux/`:
-`cache/<tool>/`, `build/`, and `runs/<purpose>/<run-id>/`.
-Make exports TMPDIR/TMP/TEMP, GOCACHE/GOMODCACHE/GOBIN, Bun/npm,
-Python/uv and Playwright paths. Direct commands and delegates must use these
-same variables. The profiling helper configures isolated test scratch itself;
-t.TempDir inherits TMPDIR. Do not use bare /tmp or home caches.
+Canonical project name: **picoflux**, independent of checkout directory name.
+The vendored `scripts/project-tmp.sh` resolves the root before changing child
+TMPDIR. Make snapshots and exports PROJECT_ORIGINAL_TMPDIR; the helper does
+likewise when invoked directly. Children receive the resolved PROJECT_TMP_ROOT
+so resolution cannot recursively append project names.
 
-Retain CPU/heap profiles, binaries, logs, and receipts in `.profiles/`, separate
-from scratch. Never delete retained evidence or another project's root in clean.
-Do not relocate active jobs, installed toolchains, source, or durable data.
-CI may set PROJECT_TMP_ROOT to `${RUNNER_TEMP}/picoflux` as its explicit
-project-owned mapping; use the identical cache/build/runs hierarchy there.
+- Absolute PROJECT_TMP_BASE selects `<base>/picoflux`.
+- Absolute PROJECT_TMP_ROOT is supported for compatibility and must end in
+  `picoflux`. When both overrides are supplied they must agree.
+- Invalid, unowned, unwritable, symlink or conflicting overrides fail, never
+  silently fall back.
+- CI: usable RUNNER_TEMP, then original inherited TMPDIR, then platform temp,
+  always appending `picoflux`; CI never prefers an existing workspace mount.
+- Local: writable `/workspace/tmp`, otherwise platform temp (POSIX `/tmp`),
+  always appending `picoflux`.
 
-### Portable root resolution (supersedes workspace-only defaults)
+Layout: `cache/<tool>/`, `build/`, `tests/`, `logs/`, and
+`runs/<purpose>/<run-id>/`. Make exports TMPDIR/TMP/TEMP and Go, Bun/npm,
+Python/uv and Playwright cache variables through this root. Direct commands and
+delegates must use the same configuration. Profiling helpers create isolated
+per-run scratch; t.TempDir inherits TMPDIR. No host helper is required.
 
-The vendored `scripts/project-tmp.sh` resolves the canonical root once, before
-exporting child TMPDIR/TMP/TEMP. An explicit PROJECT_TMP_ROOT must be absolute,
-usable, project-owned, non-symlink and end in `picoflux`; invalid overrides fail.
-Without an override: writable `/workspace/tmp/picoflux`, then
-`${RUNNER_TEMP}/picoflux`, original `${TMPDIR}/picoflux`, then platform
-`/tmp/picoflux`. Generic fallbacks are supported on non-CI hosts too.
-All choices use the same cache/build/runs hierarchy; never append the project
-name recursively after TMPDIR has been redirected. No workspace helper is
-required by the repository. Clean only owned disposable output, never retained
-`.profiles` evidence, active-job files, installed tools or another project.
+Retained CPU/heap profiles, binaries, logs and receipts remain in `.profiles/`,
+separate from disposable scratch. Clean only owned disposable files; never
+remove evidence, another project's root, active-job files, installed toolchains,
+source or durable data. Do not relocate files used by active jobs.

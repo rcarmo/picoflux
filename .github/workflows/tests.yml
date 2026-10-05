@@ -2,7 +2,7 @@ name: Tests
 permissions: read-all
 
 env:
-  PROJECT_TMP_ROOT: ${{ runner.temp }}/picoflux
+  PROJECT_TMP_BASE: ${{ runner.temp }}
 
 on:
   pull_request:
