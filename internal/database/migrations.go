@@ -75,6 +75,11 @@ var migrations = []func(tx *sql.Tx) error{
 		`)
 		return err
 	},
+	// v5: the longer index covers every left-prefix lookup on the shorter one.
+	func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DROP INDEX IF EXISTS entries_user_status_changed_idx`)
+		return err
+	},
 }
 
 const schemaSQLite = `

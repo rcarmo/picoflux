@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"image"
-	"image/color"
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
@@ -153,15 +152,19 @@ func adaptImageForEInk(src image.Image) image.Image {
 		targetHeight = 1
 	}
 
-	resized := image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
-	draw.CatmullRom.Scale(resized, resized.Bounds(), src, bounds, draw.Over, nil)
+	resized, ok := src.(*image.RGBA)
+	if !ok || targetWidth != width || targetHeight != height {
+		resized = image.NewRGBA(image.Rect(0, 0, targetWidth, targetHeight))
+		draw.CatmullRom.Scale(resized, resized.Bounds(), src, bounds, draw.Over, nil)
+	}
 
 	gray := image.NewGray(resized.Bounds())
 	for y := resized.Bounds().Min.Y; y < resized.Bounds().Max.Y; y++ {
 		for x := resized.Bounds().Min.X; x < resized.Bounds().Max.X; x++ {
-			r, g, b, _ := resized.At(x, y).RGBA()
+			offset := resized.PixOffset(x, y)
+			r, g, b := uint32(resized.Pix[offset]), uint32(resized.Pix[offset+1]), uint32(resized.Pix[offset+2])
 			// Luma in 8-bit space.
-			luma := int((299*(r>>8) + 587*(g>>8) + 114*(b>>8)) / 1000)
+			luma := int((299*r + 587*g + 114*b) / 1000)
 			// Mild contrast stretch around mid-gray, tuned for e-ink readability.
 			luma = 128 + (luma-128)*145/100
 			if luma < 0 {
@@ -169,7 +172,7 @@ func adaptImageForEInk(src image.Image) image.Image {
 			} else if luma > 255 {
 				luma = 255
 			}
-			gray.SetGray(x, y, color.Gray{Y: uint8(luma)})
+			gray.Pix[gray.PixOffset(x, y)] = uint8(luma)
 		}
 	}
 	return gray
