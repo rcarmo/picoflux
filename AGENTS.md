@@ -33,3 +33,16 @@ from scratch. Never delete retained evidence or another project's root in clean.
 Do not relocate active jobs, installed toolchains, source, or durable data.
 CI may set PROJECT_TMP_ROOT to `${RUNNER_TEMP}/picoflux` as its explicit
 project-owned mapping; use the identical cache/build/runs hierarchy there.
+
+### Portable root resolution (supersedes workspace-only defaults)
+
+The vendored `scripts/project-tmp.sh` resolves the canonical root once, before
+exporting child TMPDIR/TMP/TEMP. An explicit PROJECT_TMP_ROOT must be absolute,
+usable, project-owned, non-symlink and end in `picoflux`; invalid overrides fail.
+Without an override: writable `/workspace/tmp/picoflux`, then
+`${RUNNER_TEMP}/picoflux`, original `${TMPDIR}/picoflux`, then platform
+`/tmp/picoflux`. Generic fallbacks are supported on non-CI hosts too.
+All choices use the same cache/build/runs hierarchy; never append the project
+name recursively after TMPDIR has been redirected. No workspace helper is
+required by the repository. Clean only owned disposable output, never retained
+`.profiles` evidence, active-job files, installed tools or another project.

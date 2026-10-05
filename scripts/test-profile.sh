@@ -2,7 +2,10 @@
 set -uo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
-export PROJECT_TMP_ROOT=${PROJECT_TMP_ROOT:-/workspace/tmp/picoflux}
+source "$root/scripts/project-tmp.sh"
+PROJECT_TMP_ROOT=$(project_tmp_resolve picoflux) || exit 1
+project_tmp_init "$PROJECT_TMP_ROOT" || exit 1
+export PROJECT_TMP_ROOT
 export TMPDIR="$PROJECT_TMP_ROOT/runs/tests/$(date -u +%Y%m%dT%H%M%S)-$$"
 export TMP="$TMPDIR" TEMP="$TMPDIR"
 export GOCACHE="$PROJECT_TMP_ROOT/cache/go-build"
