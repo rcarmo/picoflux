@@ -35,7 +35,7 @@ When reporting bugs:
 ### Requirements
 
 - **Git**
-- **Go >= 1.26**
+- **Go >= 1.27**
 
 ### Getting Started
 

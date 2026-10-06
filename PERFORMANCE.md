@@ -1,7 +1,8 @@
 # Performance review — October 2026
 
-Every test now runs through scripts/test-profile.sh. Profiles, retained test
-binaries, logs, cumulative CPU and allocation reports live in .profiles/.
+Pre-release profiling runs through scripts/test-profile.sh. Raw profiles, matching
+binaries and reports use the project-owned runs/profiles hierarchy and are deleted
+immediately after analysis. Retain concise conclusions here, not raw evidence.
 Run focused workloads with TEST_PACKAGES and benchmark flags; do not compare
 race-detector timings with production or non-race timings.
 
@@ -58,7 +59,32 @@ latency acceptance. Remaining profiles are dominated by html/template execution,
 not clone setup. Replacing the safe template engine is not justified by this
 bounded benchmark.
 
-Full suite rerun with CPU/heap capture after changes, with retained cumulative
+Full suite rerun with CPU/heap capture after changes, with analysed cumulative
 CPU/alloc_space/alloc_objects tables. Short unit tests can have empty CPU samples;
 the representative rendering benchmarks provide usable CPU evidence. Test
 fixtures and profiler overhead remain distinct from application hotspots.
+
+## Dependency refresh — October 6, 2026
+
+Updated all direct Go modules and their selected transitive dependencies, retaining
+modernc SQLite, plus CI actions (immutable release pins), ESLint flat configuration,
+Alpine 3.24 and Go 1.27.1. The old local Go 1.26.3 had ten reachable standard-library
+vulnerability findings; scanning with 1.27.1 reports none reachable. One module-only
+advisory remains outside called packages/symbols; this is not a claim of no advisory
+anywhere in the module graph.
+
+Equivalent three-run CPU/heap-profiled benchmarks on the same host:
+- Before refresh: render 13.11–13.62 us/op, 17.33 KB, 623 allocations;
+  e-ink 2.145–2.153 ms/op, 631 KB, 2 allocations.
+- Updated dependencies, old toolchain: render 12.95–13.44 us/op;
+  e-ink 2.088–2.113 ms/op; allocation counts unchanged.
+- Final Go 1.27.1: render 12.23–13.51 us/op; e-ink 2.170–2.227 ms/op;
+  allocation counts unchanged. No material dependency-driven speedup claimed.
+
+CPU profiles identified per-pixel offset arithmetic as a candidate. Hoisting it
+passed non-zero-origin and subimage/stride reference tests but comparative timing
+regressed (2.60–2.90 ms/op); discarded it, retaining the additional regression test.
+Remaining allocations are chiefly HTML execution and the required grayscale output
+buffer. Full profiled tests, focused race tests, vet/build and five static Linux
+cross-builds passed. Alpine build verifies the binary, certificates and timezone
+assets. Disposable run artifacts removed after analysis.

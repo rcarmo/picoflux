@@ -4,11 +4,11 @@ ARG BUILDPLATFORM=linux/amd64
 
 # Compile on BUILDPLATFORM and target GOOS/GOARCH directly. picoflux uses the
 # pure-Go modernc SQLite driver, so CGO and target emulation are unnecessary.
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:trixie AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.1-trixie AS build
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG TARGETVARIANT
+ARG TARGETVARIANT=
 ARG VERSION=dev
 
 ADD . /go/src/app

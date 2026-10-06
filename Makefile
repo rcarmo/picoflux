@@ -1,4 +1,4 @@
-# Disposable output only; retained .profiles evidence is never cleaned here.
+# Disposable output only; profiles are removed after analysis (see AGENTS.md).
 # Resolve once with the original TMPDIR still available. Explicit unsafe
 # overrides fail instead of falling back. The resolver is vendored for portability.
 export PROJECT_ORIGINAL_TMPDIR := $(if $(filter undefined,$(origin PROJECT_ORIGINAL_TMPDIR)),$(TMPDIR),$(PROJECT_ORIGINAL_TMPDIR))

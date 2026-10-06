@@ -5,11 +5,11 @@ ARG BUILDPLATFORM=linux/amd64
 # Build on the native BuildKit host architecture and cross-compile the pure-Go
 # picoflux binary for the requested target. No target binary is executed here,
 # so multi-arch builds do not need QEMU.
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:alpine3.23 AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.1-alpine3.24 AS build
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG TARGETVARIANT
+ARG TARGETVARIANT=
 ARG VERSION=dev
 
 RUN apk add --no-cache git make
@@ -31,10 +31,10 @@ RUN set -eux; \
 # ca-certificates and tzdata contain architecture-independent data. Prepare
 # them once on BUILDPLATFORM, then copy them into the target stage without
 # running apk under emulation.
-FROM --platform=$BUILDPLATFORM docker.io/library/alpine:3.23 AS runtime-data
+FROM --platform=$BUILDPLATFORM docker.io/library/alpine:3.24 AS runtime-data
 RUN apk add --no-cache ca-certificates tzdata
 
-FROM docker.io/library/alpine:3.23
+FROM docker.io/library/alpine:3.24
 
 LABEL org.opencontainers.image.title=picoflux
 LABEL org.opencontainers.image.description="picoflux is a SQLite-backed fork of Miniflux, a minimalist feed reader"
