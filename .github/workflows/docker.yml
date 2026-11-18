@@ -174,8 +174,26 @@ jobs:
             sources+=("${REGISTRY}/${IMAGE_NAME}@sha256:$(basename "${digest_file}")")
           done < <(find /tmp/digests -type f | sort)
 
+          # Expected platform count per variant. Keep in sync with the
+          # build-images matrix above. If any architecture build leg is
+          # missing, the manifest would silently drop it (this is how
+          # amd64 went missing from the v0.0.14 / latest tags), so refuse
+          # to publish a partial manifest.
+          case "${{ matrix.variant }}" in
+            alpine) expected=5 ;;     # amd64, arm64, arm/v6, arm/v7, riscv64
+            distroless) expected=4 ;; # amd64, arm64, arm/v7, riscv64
+            *) expected=0 ;;
+          esac
+
           if [[ ${#sources[@]} -eq 0 ]]; then
             echo "No architecture digests were downloaded" >&2
+            exit 1
+          fi
+
+          if [[ ${#sources[@]} -lt ${expected} ]]; then
+            echo "Only ${#sources[@]} of ${expected} expected platform digests present; refusing to publish a partial manifest (would silently drop architectures)." >&2
+            echo "Downloaded digests:" >&2
+            find /tmp/digests -type f | sort >&2
             exit 1
           fi
 
